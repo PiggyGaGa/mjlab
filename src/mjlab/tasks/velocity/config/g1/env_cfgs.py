@@ -17,6 +17,7 @@ from mjlab.sensor import (
   RingPatternCfg,
   TerrainHeightSensorCfg,
 )
+from mjlab.tasks.g1_3dgs import apply_g1_3dgs_play_cfg
 from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
@@ -218,3 +219,18 @@ def unitree_g1_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     twist_cmd.ranges.ang_vel_z = (-0.7, 0.7)
 
   return cfg
+
+
+def unitree_g1_flat_3dgs_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Create flat G1 training with a native 3DGS camera enabled only for play."""
+  cfg = unitree_g1_flat_env_cfg(play=play)
+
+  # Keep solver overflow warnings actionable during large parallel runs instead of
+  # masking them. The velocity task's throughput-oriented 10/20 budget is too tight
+  # for some randomized G1 contacts, so give this task a modest convergence margin.
+  cfg.sim.mujoco.iterations = 20
+  cfg.sim.mujoco.ls_iterations = 40
+
+  if not play:
+    return cfg
+  return apply_g1_3dgs_play_cfg(cfg)

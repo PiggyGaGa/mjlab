@@ -4,6 +4,8 @@ import pytest
 
 from mjlab.asset_zoo.robots import G1_ACTION_SCALE, GO1_ACTION_SCALE
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.scene import GaussianSplatSceneCfg
+from mjlab.sensor import CameraSensorCfg, TerrainHeightSensorCfg
 from mjlab.tasks.registry import list_tasks, load_env_cfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
@@ -178,6 +180,32 @@ def test_g1_velocity_has_correct_action_scale(g1_velocity_task_ids: list[str]) -
     assert joint_pos_action.scale == G1_ACTION_SCALE, (
       f"Task {task_id} action scale mismatch, expected G1_ACTION_SCALE"
     )
+
+
+def test_g1_3dgs_is_enabled_only_for_play() -> None:
+  task_id = "Mjlab-Velocity-Flat-Unitree-G1-3DGS"
+  training_cfg = load_env_cfg(task_id)
+  play_cfg = load_env_cfg(task_id, play=True)
+
+  assert training_cfg.sim.mujoco.iterations == 20
+  assert training_cfg.sim.mujoco.ls_iterations == 40
+  assert play_cfg.sim.mujoco.iterations == 20
+  assert play_cfg.sim.mujoco.ls_iterations == 40
+  assert training_cfg.scene.gaussian_splats is None
+  assert not any(
+    isinstance(sensor, CameraSensorCfg) for sensor in (training_cfg.scene.sensors or ())
+  )
+  assert isinstance(play_cfg.scene.gaussian_splats, GaussianSplatSceneCfg)
+  assert play_cfg.viewer.geom_group == (0, 1, 1, 0, 0, 0)
+  assert not any(
+    isinstance(sensor, CameraSensorCfg) for sensor in (play_cfg.scene.sensors or ())
+  )
+  foot_height = next(
+    sensor
+    for sensor in (play_cfg.scene.sensors or ())
+    if isinstance(sensor, TerrainHeightSensorCfg) and sensor.name == "foot_height_scan"
+  )
+  assert foot_height.include_geom_groups == (2,)
 
 
 def test_go1_velocity_has_correct_action_scale(

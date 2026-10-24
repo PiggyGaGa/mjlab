@@ -8,6 +8,7 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
+from mjlab.tasks.g1_3dgs import apply_g1_3dgs_play_cfg
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.tasks.tracking.tracking_env_cfg import make_tracking_env_cfg
 
@@ -85,6 +86,12 @@ def unitree_g1_flat_tracking_env_cfg(
 
   # Apply play mode overrides.
   if play:
+    # Playback favors stable contact convergence over maximum simulation throughput.
+    # This also covers the bundled cartwheel demo, whose impacts can exceed the
+    # tracking task's training-oriented 10/20 solver budget.
+    cfg.sim.mujoco.iterations = 20
+    cfg.sim.mujoco.ls_iterations = 40
+
     # Effectively infinite episode length.
     cfg.episode_length_s = int(1e9)
 
@@ -98,3 +105,13 @@ def unitree_g1_flat_tracking_env_cfg(
     motion_cmd.sampling_mode = "start"
 
   return cfg
+
+
+def unitree_g1_flat_tracking_3dgs_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """Create G1 tracking with native Viser 3DGS enabled only for play."""
+  cfg = unitree_g1_flat_tracking_env_cfg(play=play)
+  if not play:
+    return cfg
+  return apply_g1_3dgs_play_cfg(cfg)

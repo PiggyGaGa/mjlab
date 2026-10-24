@@ -12,6 +12,7 @@ import torch
 import warp as wp
 
 if TYPE_CHECKING:
+  from mjlab.scene.gaussian_splat import GaussianSplatData
   from mjlab.sensor.camera_sensor import CameraSensor
   from mjlab.sensor.raycast_sensor import RayCastSensor
 
@@ -51,6 +52,7 @@ class SensorContext:
     data: mjwarp.Data,
     camera_sensors: list[CameraSensor],
     raycast_sensors: Sequence[RayCastSensor],
+    gaussian_splats: GaussianSplatData | None,
     device: str,
   ):
     self._model = model
@@ -60,6 +62,7 @@ class SensorContext:
     # Sort camera sensors by camera index for consistent ordering.
     self.camera_sensors = sorted(camera_sensors, key=lambda s: s.camera_idx)
     self.raycast_sensors = raycast_sensors
+    self._splat_data = gaussian_splats if self.camera_sensors else None
 
     # MuJoCo camera ID -> sorted list index.
     self._cam_idx_to_list_idx = {
@@ -96,6 +99,11 @@ class SensorContext:
   @property
   def render_context(self) -> mjwarp.RenderContext:
     return self._ctx
+
+  @property
+  def splat_data(self) -> GaussianSplatData | None:
+    """Normalized 3DGS data shared with native frontend renderers."""
+    return self._splat_data
 
   def recreate(
     self,
@@ -318,6 +326,18 @@ class SensorContext:
       cam_active = [False] * ncam
 
     with wp.ScopedDevice(self.wp_device):
+      splat_position = (
+        self._splat_data.position if self._splat_data is not None else None
+      )
+      splat_rotation = (
+        self._splat_data.rotation if self._splat_data is not None else None
+      )
+      splat_scale = self._splat_data.scale if self._splat_data is not None else None
+      splat_rgba = self._splat_data.rgba if self._splat_data is not None else None
+      splat_adr = self._splat_data.adr if self._splat_data is not None else None
+      splat_group_id = (
+        self._splat_data.group_id if self._splat_data is not None else None
+      )
       self._ctx = mjwarp.create_render_context(
         mjm=mj_model,
         nworld=self._data.nworld,
@@ -332,6 +352,12 @@ class SensorContext:
         render_seg=render_seg,
         render_skybox=True,
         background_color=(0.0, 0.0, 0.0, 1.0),
+        splat_position=splat_position,
+        splat_rotation=splat_rotation,
+        splat_scale=splat_scale,
+        splat_rgba=splat_rgba,
+        splat_adr=splat_adr,
+        splat_group_id=splat_group_id,
       )
 
     # Cache address arrays from the render context. An adr value of -1 means that data

@@ -11,6 +11,7 @@ import torch
 from typing_extensions import assert_never
 
 from mjlab.envs import ManagerBasedRlEnv
+from mjlab.sensor import CameraSensor
 
 
 class VideoRecorder(ManagerBasedRlEnv):
@@ -38,6 +39,9 @@ class VideoRecorder(ManagerBasedRlEnv):
           If set, records exactly that many frames regardless of episode boundaries.
       name_prefix: Prefix for video filenames.
       disable_logger: Whether to disable logging.
+      camera_sensor_name: Optional RGB camera sensor to record instead of
+          ``env.render()``. This supports MuJoCo Warp camera output, including
+          native 3D Gaussian Splatting.
   """
 
   def __init__(
@@ -49,6 +53,7 @@ class VideoRecorder(ManagerBasedRlEnv):
     video_length: int | None = None,
     name_prefix: str = "rl-video",
     disable_logger: bool = False,
+    camera_sensor_name: str | None = None,
   ):
     # Don't call super().__init__() - we're wrapping an existing env.
     self._wrapped_env = env
@@ -60,6 +65,7 @@ class VideoRecorder(ManagerBasedRlEnv):
     self.video_length = video_length
     self.name_prefix = name_prefix
     self.disable_logger = disable_logger
+    self.camera_sensor_name = camera_sensor_name
 
     self.step_count: int = 0
     self.episode_count: int = 0  # Tracks actual episodes
@@ -175,15 +181,30 @@ class VideoRecorder(ManagerBasedRlEnv):
 
     For vectorized environments, only records env[0].
     """
-    if self._wrapped_env.render_mode == "rgb_array":
-      frame = self._wrapped_env.render()
-      if frame is not None:
-        # For vectorized envs: frame shape is (num_envs, height, width, 3).
-        # Extract the first environment's frame.
-        rgb_frame = (
-          frame[0] if isinstance(frame, np.ndarray) and frame.ndim == 4 else frame
+    if self.camera_sensor_name is not None:
+      sensor = self._wrapped_env.scene[self.camera_sensor_name]
+      if not isinstance(sensor, CameraSensor):
+        raise TypeError(
+          f"Video sensor '{self.camera_sensor_name}' is "
+          f"{type(sensor).__name__}, expected CameraSensor."
         )
-        self.current_video_frames.append(rgb_frame)
+      rgb = sensor.data.rgb
+      if rgb is None:
+        raise ValueError(
+          f"Video sensor '{self.camera_sensor_name}' does not provide RGB data."
+        )
+      self.current_video_frames.append(rgb[0].detach().cpu().numpy())
+      return
+
+    if self._wrapped_env.render_mode != "rgb_array":
+      return
+    frame = self._wrapped_env.render()
+    if frame is None:
+      return
+    # For vectorized envs: frame shape is (num_envs, height, width, 3).
+    # Extract the first environment's frame.
+    rgb_frame = frame[0] if isinstance(frame, np.ndarray) and frame.ndim == 4 else frame
+    self.current_video_frames.append(rgb_frame)
 
   def _finish_recording(self) -> None:
     """Finish recording and save the video."""

@@ -415,6 +415,10 @@ RGB-D Camera
 ``CameraSensor`` renders RGB and depth images from MuJoCo cameras. See
 :ref:`rgbd_camera` for full documentation.
 
+Camera sensors can also render static 3D Gaussian Splatting assets through
+MuJoCo Warp's native splat renderer. See :ref:`gaussian_splats` for asset
+requirements and scene configuration.
+
 
 Extending: custom sensors
 -------------------------
@@ -453,3 +457,4 @@ reference implementations for custom sensor development.
 
    raycast_sensor
    rgbd_camera
+   gaussian_splats

@@ -37,6 +37,44 @@ uv run demo
 
 For alternative installation methods (PyPI, Docker), see the [Installation Guide](https://mujocolab.github.io/mjlab/main/source/installation.html).
 
+## 3D Gaussian Splatting
+
+mjlab can place trained robots in a static 3D Gaussian Splatting (3DGS) scene.
+Viser renders the splats natively alongside the robot, while MuJoCo continues to
+use separate collision geometry.
+
+The goal is broader than photorealistic playback. A reconstructed real environment
+can become a robot-learning scene whose visual representation, collision proxy,
+sensor observations, training configuration, and policy evaluation share one
+coordinate system. The native MuJoCo Warp path also avoids introducing a second
+Gaussian renderer and its CUDA dependency stack.
+
+This creates a foundation for several robotics directions:
+
+- vision-based locomotion, navigation, and manipulation in reconstructed places;
+- automatic conversion of visual reconstructions into contact-stable collision
+  proxies for robot training;
+- measuring and reducing visual-to-physical mismatch in simulation;
+- generating realistic RGB/depth observations for policy robustness and
+  sim-to-sim or sim-to-real evaluation;
+- task-aware scene simplification that balances contact quality, visual fidelity,
+  training throughput, and memory use.
+
+The current milestone provides native visualization and sensor integration while
+using a hidden MuJoCo plane for contact. Automatic collision-proxy generation and
+training directly against reconstructed scene geometry are planned next. Run the
+pretrained G1 tracking demo with a Graphdeco-style PLY file:
+
+```bash
+uv run demo \
+  --use-3dgs True \
+  --gaussian-splat-file /path/to/point_cloud.ply
+```
+
+See the [3D Gaussian Splatting guide](https://mujocolab.github.io/mjlab/main/source/sensors/gaussian_splats.html)
+for scene configuration, training, playback, multiple robots, recording, and
+performance notes.
+
 ## Training Examples
 
 ### 1. Velocity Tracking

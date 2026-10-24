@@ -3,7 +3,7 @@
 import os
 import sys
 import time as _time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -11,9 +11,13 @@ from typing import Literal
 import torch
 import tyro
 
-from mjlab.envs import ManagerBasedRlEnv
+from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
 from mjlab.scripts._cli import maybe_print_top_level_help
+from mjlab.tasks.g1_3dgs import (
+  G1_3DGS_VIDEO_SENSOR,
+  enable_g1_3dgs_video_sensor,
+)
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.utils.os import get_wandb_checkpoint_path
@@ -39,10 +43,14 @@ class PlayConfig:
   """Optional checkpoint name within the W&B run to load (e.g. 'model_4000.pt')."""
   checkpoint_file: str | None = None
   motion_file: str | None = None
+  gaussian_splat_file: str | None = None
+  """PLY file overriding the task's configured single 3DGS asset."""
   num_envs: int | None = None
   device: str | None = None
   video: bool = False
   video_length: int = 200
+  video_sensor: str | None = None
+  """RGB CameraSensor to record instead of the MuJoCo offscreen renderer."""
   video_height: int | None = None
   video_width: int | None = None
   camera: int | str | None = None
@@ -56,6 +64,29 @@ class PlayConfig:
   _demo_mode: tyro.conf.Suppress[bool] = False
 
 
+def _override_gaussian_splat_file(
+  env_cfg: ManagerBasedRlEnvCfg, gaussian_splat_file: str
+) -> None:
+  """Override a task's single configured 3DGS asset from the command line."""
+  splat_cfg = env_cfg.scene.gaussian_splats
+  if splat_cfg is None:
+    raise ValueError(
+      "--gaussian-splat-file requires a task with GaussianSplatSceneCfg."
+    )
+  if len(splat_cfg.assets) != 1:
+    raise ValueError(
+      "--gaussian-splat-file only supports tasks with exactly one 3DGS asset; "
+      f"this task configures {len(splat_cfg.assets)}."
+    )
+
+  asset_path = Path(gaussian_splat_file).expanduser()
+  if not asset_path.is_file():
+    raise FileNotFoundError(f"Gaussian splat PLY not found: {asset_path}")
+  asset = replace(splat_cfg.assets[0], path=str(asset_path))
+  env_cfg.scene.gaussian_splats = replace(splat_cfg, assets=(asset,))
+  print(f"[INFO]: Using Gaussian splat file: {asset_path}")
+
+
 def run_play(task_id: str, cfg: PlayConfig):
   configure_torch_backends()
 
@@ -64,8 +95,14 @@ def run_play(task_id: str, cfg: PlayConfig):
   env_cfg = load_env_cfg(task_id, play=True)
   agent_cfg = load_rl_cfg(task_id)
 
+  if cfg.gaussian_splat_file is not None:
+    _override_gaussian_splat_file(env_cfg, cfg.gaussian_splat_file)
+
   DUMMY_MODE = cfg.agent in {"zero", "random"}
   TRAINED_MODE = not DUMMY_MODE
+
+  if TRAINED_MODE and cfg.video and cfg.video_sensor == G1_3DGS_VIDEO_SENSOR:
+    enable_g1_3dgs_video_sensor(env_cfg)
 
   # Disable terminations if requested (useful for viewing motions).
   if cfg.no_terminations:
@@ -162,7 +199,9 @@ def run_play(task_id: str, cfg: PlayConfig):
   if cfg.video_width is not None:
     env_cfg.viewer.width = cfg.video_width
 
-  render_mode = "rgb_array" if (TRAINED_MODE and cfg.video) else None
+  render_mode = (
+    "rgb_array" if (TRAINED_MODE and cfg.video and cfg.video_sensor is None) else None
+  )
   if cfg.video and DUMMY_MODE:
     print(
       "[WARN] Video recording with dummy agents is disabled (no checkpoint/log_dir)."
@@ -178,6 +217,7 @@ def run_play(task_id: str, cfg: PlayConfig):
       step_trigger=lambda step: step == 0,
       video_length=cfg.video_length,
       disable_logger=True,
+      camera_sensor_name=cfg.video_sensor,
     )
 
   env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)

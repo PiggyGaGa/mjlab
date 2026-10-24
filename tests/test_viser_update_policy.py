@@ -5,9 +5,15 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import mujoco
+import numpy as np
 from mjviser import ViserMujocoScene
 
-from mjlab.viewer.viser.overlays import ViserContactOverlays, ViserDebugOverlays
+from mjlab.scene import GaussianSplatData
+from mjlab.viewer.viser.overlays import (
+  ViserContactOverlays,
+  ViserDebugOverlays,
+)
+from mjlab.viewer.viser.scene import MjlabViserScene
 from mjlab.viewer.viser.viewer import ViserPlayViewer
 
 
@@ -78,6 +84,42 @@ def test_scene_requires_live_refresh():
 
   scene.show_contact_points = True
   assert scene.show_contact_points or scene.show_contact_forces
+
+
+def test_scene_adds_native_gaussian_splats_and_tracks_world_offset():
+  model = mujoco.MjModel.from_xml_string("<mujoco><worldbody/></mujoco>")
+  server = MagicMock()
+  handle = server.scene.add_gaussian_splats.return_value
+  splats = GaussianSplatData(
+    position=np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32),
+    rotation=np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32),
+    scale=np.asarray([[0.1, 0.2, 0.3]], dtype=np.float32),
+    rgba=np.asarray([[0.2, 0.4, 0.6, 0.8]], dtype=np.float32),
+    adr=np.asarray([0, 1], dtype=np.int32),
+    group_id=np.asarray([0], dtype=np.int32),
+  )
+
+  scene = MjlabViserScene(
+    server,
+    model,
+    num_envs=1,
+    gaussian_splats=splats,
+    geom_groups_visible=(0, 1, 1, 0, 0, 0),
+  )
+  scene._sync_gaussian_splats(0, np.asarray([4.0, 5.0, 6.0]))
+
+  call_kwargs = server.scene.add_gaussian_splats.call_args.kwargs
+  np.testing.assert_array_equal(call_kwargs["centers"], splats.position)
+  np.testing.assert_allclose(
+    call_kwargs["covariances"],
+    np.asarray([[[0.01, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.09]]]),
+    atol=1.0e-6,
+  )
+  np.testing.assert_array_equal(call_kwargs["rgbs"], splats.rgba[:, :3])
+  np.testing.assert_array_equal(call_kwargs["opacities"], splats.rgba[:, 3:4])
+  np.testing.assert_array_equal(handle.position, [4.0, 5.0, 6.0])
+  assert handle.visible
+  assert not scene.geom_groups_visible[0]
 
 
 def test_debug_overlays_env_switch_and_queue():

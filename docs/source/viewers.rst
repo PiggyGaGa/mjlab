@@ -257,7 +257,7 @@ is set:
 
 .. code-block:: bash
 
-    uv run play Mjlab-Velocity-Flat-Unitree-G1 --video --video-length 300 \
+    uv run play Mjlab-Velocity-Flat-Unitree-G1 --video True --video-length 300 \
         --wandb-run-path your-entity/your-project/run_id
 
 

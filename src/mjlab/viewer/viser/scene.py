@@ -24,6 +24,10 @@ from mjviser.conversions import (
 from mujoco import mjtGeom
 from typing_extensions import override
 
+from mjlab.scene.gaussian_splat import (
+  GaussianSplatData,
+  gaussian_splat_covariances,
+)
 from mjlab.viewer.debug_visualizer import DebugVisualizer
 from mjlab.viewer.model_sync import (
   VIEWER_MODEL_FIELDS,
@@ -229,6 +233,8 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
     num_envs: int,
     sim_model: Any | None = None,
     expanded_fields: set[str] | None = None,
+    gaussian_splats: GaussianSplatData | None = None,
+    geom_groups_visible: tuple[int, int, int, int, int, int] | None = None,
   ) -> None:
     self._sim_model = sim_model
     self._expanded_fields = expanded_fields or set()
@@ -253,6 +259,29 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
       disable_model_sameframe_shortcuts(mj_model)
     super().__init__(server, mj_model, num_envs)
     self._baked_appearance_fingerprint = self._appearance_fingerprint()
+    if geom_groups_visible is not None:
+      self.geom_groups_visible = [bool(value) for value in geom_groups_visible]
+      self._sync_visibilities()
+
+    self._gaussian_splat_data = gaussian_splats
+    self._gaussian_splat_handles: list[viser.GaussianSplatHandle] = []
+    if gaussian_splats is not None:
+      covariances = gaussian_splat_covariances(gaussian_splats)
+      initial_asset_id = int(gaussian_splats.group_id[0])
+      for asset_id, (start, end) in enumerate(
+        zip(gaussian_splats.adr[:-1], gaussian_splats.adr[1:], strict=True)
+      ):
+        splat_slice = slice(int(start), int(end))
+        rgba = gaussian_splats.rgba[splat_slice]
+        handle = server.scene.add_gaussian_splats(
+          f"/gaussian_splats/asset_{asset_id}",
+          centers=gaussian_splats.position[splat_slice],
+          covariances=covariances[splat_slice],
+          rgbs=rgba[:, :3],
+          opacities=rgba[:, 3:4],
+          visible=asset_id == initial_asset_id,
+        )
+        self._gaussian_splat_handles.append(handle)
 
     self.debug_visualization_enabled = False
     self.show_all_envs = False
@@ -376,6 +405,7 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
       qvel=qvel,
       ctrl=ctrl,
     )
+    self._sync_gaussian_splats(env_idx, self._scene_offset)
     self._sync_debug_visualizations(self._scene_offset)
 
   @override
@@ -383,7 +413,17 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
     """Update scene and sync debug visualizations."""
     self._sync_model_fields(self.env_idx)
     super().update_from_mjdata(mj_data)
+    self._sync_gaussian_splats(self.env_idx, self._scene_offset)
     self._sync_debug_visualizations(self._scene_offset)
+
+  def _sync_gaussian_splats(self, env_idx: int, scene_offset: np.ndarray) -> None:
+    """Show the selected world's splat asset at its Viser scene offset."""
+    if self._gaussian_splat_data is None:
+      return
+    asset_id = int(self._gaussian_splat_data.group_id[env_idx])
+    for index, handle in enumerate(self._gaussian_splat_handles):
+      handle.visible = index == asset_id
+      handle.position = scene_offset
 
   def _sync_model_fields(self, env_idx: int) -> None:
     """Sync visually relevant per-world model fields into the host MjModel."""

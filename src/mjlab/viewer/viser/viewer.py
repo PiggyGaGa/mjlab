@@ -105,6 +105,8 @@ class ViserPlayViewer(BaseViewer):
       num_envs=self.env.num_envs,
       sim_model=sim.model,
       expanded_fields=sim.expanded_fields,
+      gaussian_splats=self.env.unwrapped.scene.gaussian_splat_data,
+      geom_groups_visible=self.cfg.geom_group,
     )
 
     self._scene.env_idx = self.cfg.env_idx

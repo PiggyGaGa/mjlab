@@ -4,6 +4,8 @@ import pytest
 
 from mjlab.asset_zoo.robots import G1_ACTION_SCALE
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.scene import GaussianSplatSceneCfg
+from mjlab.sensor import CameraSensorCfg
 from mjlab.tasks.registry import list_tasks, load_env_cfg
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 
@@ -77,6 +79,7 @@ def test_tracking_play_disables_rsi_randomization() -> None:
   tracking_tasks = [
     "Mjlab-Tracking-Flat-Unitree-G1",
     "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation",
+    "Mjlab-Tracking-Flat-Unitree-G1-3DGS",
   ]
 
   for task_id in tracking_tasks:
@@ -102,6 +105,7 @@ def test_tracking_play_uses_start_sampling_mode() -> None:
   tracking_tasks = [
     "Mjlab-Tracking-Flat-Unitree-G1",
     "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation",
+    "Mjlab-Tracking-Flat-Unitree-G1-3DGS",
   ]
 
   for task_id in tracking_tasks:
@@ -115,6 +119,43 @@ def test_tracking_play_uses_start_sampling_mode() -> None:
     assert motion_cmd.sampling_mode == "start", (
       f"Task {task_id} (play mode) sampling_mode={motion_cmd.sampling_mode}, expected 'start'"
     )
+
+
+def test_g1_tracking_play_has_larger_solver_budget() -> None:
+  task_id = "Mjlab-Tracking-Flat-Unitree-G1"
+  training_cfg = load_env_cfg(task_id)
+  play_cfg = load_env_cfg(task_id, play=True)
+
+  assert training_cfg.sim.mujoco.iterations == 10
+  assert training_cfg.sim.mujoco.ls_iterations == 20
+  assert play_cfg.sim.mujoco.iterations == 20
+  assert play_cfg.sim.mujoco.ls_iterations == 40
+
+
+def test_g1_tracking_3dgs_changes_only_play_scene() -> None:
+  base_task_id = "Mjlab-Tracking-Flat-Unitree-G1"
+  task_id = "Mjlab-Tracking-Flat-Unitree-G1-3DGS"
+  base_cfg = load_env_cfg(base_task_id)
+  training_cfg = load_env_cfg(task_id)
+  play_cfg = load_env_cfg(task_id, play=True)
+
+  assert training_cfg.scene.gaussian_splats is None
+  assert not any(
+    isinstance(sensor, CameraSensorCfg) for sensor in training_cfg.scene.sensors or ()
+  )
+  assert training_cfg.observations.keys() == base_cfg.observations.keys()
+  for group_name in training_cfg.observations:
+    assert (
+      training_cfg.observations[group_name].terms.keys()
+      == base_cfg.observations[group_name].terms.keys()
+    )
+  assert training_cfg.actions.keys() == base_cfg.actions.keys()
+
+  assert isinstance(play_cfg.scene.gaussian_splats, GaussianSplatSceneCfg)
+  assert play_cfg.viewer.geom_group == (0, 1, 1, 0, 0, 0)
+  assert not any(
+    isinstance(sensor, CameraSensorCfg) for sensor in play_cfg.scene.sensors or ()
+  )
 
 
 def test_g1_tracking_has_correct_action_scale(g1_tracking_task_ids: list[str]) -> None:

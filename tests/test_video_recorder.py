@@ -5,8 +5,10 @@ from unittest.mock import Mock
 
 import mediapy as media
 import numpy as np
+import pytest
 import torch
 
+from mjlab.sensor import CameraSensor
 from mjlab.utils.wrappers.video_recorder import VideoRecorder
 
 
@@ -75,6 +77,51 @@ def test_accepts_string_path(tmp_path: Path):
   recorder.close()
 
   assert list(Path(folder).glob("*.mp4"))
+
+
+def test_records_rgb_camera_sensor(tmp_path: Path):
+  """VideoRecorder can write native MJWarp CameraSensor RGB output."""
+  env = _make_mock_env()
+  env.render_mode = None
+  sensor = Mock(spec=CameraSensor)
+  sensor.data.rgb = torch.randint(0, 255, (1, 48, 64, 3), dtype=torch.uint8)
+  env.scene = {"video_camera": sensor}
+  recorder = VideoRecorder(
+    env,
+    video_folder=tmp_path,
+    step_trigger=lambda step: step == 0,
+    video_length=3,
+    disable_logger=True,
+    camera_sensor_name="video_camera",
+  )
+
+  for _ in range(4):
+    recorder.step(torch.zeros(1))
+  recorder.close()
+
+  video_path = next(tmp_path.glob("*.mp4"))
+  frames = media.read_video(str(video_path))
+  assert len(frames) == 3
+  assert frames[0].shape == (48, 64, 3)
+
+
+def test_camera_sensor_recording_rejects_missing_rgb(tmp_path: Path):
+  env = _make_mock_env()
+  env.render_mode = None
+  sensor = Mock(spec=CameraSensor)
+  sensor.data.rgb = None
+  env.scene = {"depth_only_camera": sensor}
+  recorder = VideoRecorder(
+    env,
+    video_folder=tmp_path,
+    step_trigger=lambda step: step == 0,
+    video_length=1,
+    disable_logger=True,
+    camera_sensor_name="depth_only_camera",
+  )
+
+  with pytest.raises(ValueError, match="does not provide RGB"):
+    recorder.step(torch.zeros(1))
 
 
 def test_episode_trigger_fires_at_each_triggered_episode_start(tmp_path: Path):

@@ -8,6 +8,23 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added static 3D Gaussian Splatting assets for RGB-D camera observations through
+  MuJoCo Warp's native splat renderer. ``GaussianSplatAssetCfg`` loads Graphdeco-style
+  PLY files with filtering and world transforms, while ``GaussianSplatSceneCfg``
+  supports per-world asset groups.
+- Added G1 velocity and pretrained tracking 3DGS play tasks, including
+  ``demo --use-3dgs True``, and ``play --video-sensor`` recording from native MuJoCo
+  Warp RGB camera output. Training stays headless and uses the existing flat-plane
+  physics, while play can render and record the robot over a 3DGS scene.
+  ``--gaussian-splat-file`` overrides the configured PLY directly from the command
+  line for both ``play`` and ``demo``.
+  Viser-only playback leaves the MuJoCo Warp camera disabled to avoid rendering the
+  3DGS scene twice; selecting ``g1_3dgs_video`` for video recording enables it on
+  demand.
+  Its solver budget is increased to 20 Newton and 40 line-search iterations to avoid
+  convergence-limit overflows during randomized parallel training. Viser loads the
+  same normalized splats into its native interactive 3DGS renderer, while camera
+  feeds and recording continue to use MuJoCo Warp rendering.
 - Added ``GridPatternCfg.offset`` to shift the ray grid in frame-local XY.
 - ``GridPatternCfg.resolution`` accepts a per-axis ``(x, y)`` tuple.
 - Added a ``cu126`` extra (``uv sync --extra cu126``) that installs torch built for
@@ -41,6 +58,13 @@ Changed
 Fixed
 ^^^^^
 
+- ``demo --use-3dgs False`` now ignores ``--gaussian-splat-file`` instead of
+  applying it to the non-3DGS tracking task.
+- Play video examples now pass the explicit ``True`` value required by the project's
+  Tyro boolean syntax instead of treating the following option as ``--video``'s value.
+- The bundled G1 tracking demo and tracking play configurations now use a larger
+  solver budget, preventing contact solver and line-search iteration-limit warnings
+  during high-impact motions such as the cartwheel demo.
 - ``posture`` and ``variable_posture`` now pair each joint with its own ``std`` when
   ``asset_cfg.preserve_order=True``.
 - ``apply_body_impulse`` now applies ``body_point_offset`` in the body frame, as

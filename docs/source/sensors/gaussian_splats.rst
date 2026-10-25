@@ -112,16 +112,255 @@ frontend such as Viser can consume them without creating a camera sensor. A
 ``CameraSensorCfg`` additionally creates the MuJoCo Warp render context and renders
 on every sensing update.
 
-The bundled G1 3DGS tasks attach ``GaussianSplatSceneCfg`` only to their play
-configuration. Their training configuration therefore does not parse the PLY,
-allocate splat arrays, create a splat BVH, or pay any rendering cost. Normal Viser
+The ordinary G1 and G1 3DGS playback tasks do not create a training camera, so
+proprioceptive training does not parse a PLY or pay a rendering cost. Normal Viser
 playback loads the PLY once but does not create the MuJoCo Warp camera. The camera
 is enabled on demand only for explicit sensor-based video recording.
 
-The current importer reads the source PLY during environment initialization.
-Very large assets should be filtered with bounds, opacity, or ``max_splats``.
-A versioned preprocessing cache and automatic collision-proxy generation are
-planned separately.
+``Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth`` is the explicit visual-training
+variant. It loads the Gaussian scene during training and renders a ``64 x 48``
+forward/downward depth image every control step. Keep the non-visual task ID when
+camera observations are not needed.
+
+The current importer reads the source PLY once during environment initialization;
+simulation and rendering then use the in-memory/GPU representation. Very large
+assets should be filtered with bounds, opacity, or ``max_splats``. A versioned
+preprocessing cache is an optional future startup-time optimization, while automatic
+collision-proxy generation is planned separately.
+
+
+External collision scene
+------------------------
+
+The visual PLY and collision MJCF are separate representations of one logical
+scene. They must already use the same right-handed, Z-up coordinate frame, meter
+units, and origin. The collision entry point can contain static primitive geoms,
+multiple convex mesh assets, and heightfields. It must not contain joints, mocap
+bodies, actuators, or sensors.
+
+Use this asset layout so that the MJCF can resolve every dependency relative to
+its own directory:
+
+.. code-block:: text
+
+    scene_name/
+      visual/
+        splats.ply
+      collision/
+        collision.xml
+        meshes/
+          ground_000.obj
+          stair_000.obj
+        heightfields/
+          terrain.png
+
+For example, ``collision.xml`` can define both a mesh and a primitive:
+
+.. code-block:: xml
+
+    <mujoco model="scene_collision">
+      <compiler angle="radian" meshdir="meshes"/>
+      <default>
+        <geom group="3" contype="1" conaffinity="1" condim="3"
+              friction="1.0 0.005 0.0001" rgba="0.2 0.8 0.2 0.25"/>
+      </default>
+      <asset>
+        <mesh name="stair_000" file="stair_000.obj"/>
+      </asset>
+      <worldbody>
+        <geom name="stair_000" type="mesh" mesh="stair_000"/>
+        <geom name="ground" type="box" pos="0 0 -0.05" size="5 5 0.05"/>
+      </worldbody>
+    </mujoco>
+
+Absolute paths, ``..`` path traversal, and MJCF includes are rejected. A mesh
+geom follows MuJoCo's convex collision semantics, so a concave environment must
+be exported as multiple convex mesh assets instead of one arbitrary scene mesh.
+Contact parameters such as friction, ``condim``, ``priority``, ``contype``, and
+``conaffinity`` remain authored in ``collision.xml``.
+
+MuJoCo allows collision geoms directly under ``<worldbody>``. mjlab accepts this
+form and automatically adds an internal fixed root body required by terrain
+indexing; users do not need to add an artificial dynamic or mocap body.
+
+Pass the external physics scene to training through the terrain configuration:
+
+.. code-block:: bash
+
+    uv run train Mjlab-Velocity-Flat-Unitree-G1-3DGS \
+        --env.scene.terrain.terrain-type mjcf \
+        --env.scene.terrain.mjcf-path /path/to/scene/collision/collision.xml \
+        --env.scene.num-envs 4096
+
+This replaces the default plane; all parallel worlds share the same static
+collision model. Add ``--env.scene.terrain.mjcf-keep-plane True`` only for an
+explicit fallback experiment. Use the ``-3DGS-Depth`` task ID when the policy
+should consume rendered depth; the ordinary ``-3DGS`` task remains a
+playback-oriented proprioceptive task.
+
+The imported scene uses the conventional fixed ``terrain`` root body, so existing
+contact sensors continue to recognize it. ``TerrainHeightSensorCfg`` instances are
+automatically redirected to ``mjcf_geom_group``; this keeps foot-height observations
+on the external collision surface instead of the removed plane.
+
+For ``play`` or ``demo``, prefer the versioned manifest:
+
+.. code-block:: bash
+
+    uv run demo \
+        --use-3dgs True \
+        --scene-manifest /path/to/scene/manifest.json
+
+``manifest.json`` binds the PLY, collision MJCF, optional collision dependency
+files, SHA-256 fingerprints, right-handed Z-up metre convention, one
+``world_from_scene`` transform, and named spawn-point metadata. Asset paths must be
+relative to the manifest directory and cannot escape it. Hashes are checked before
+the scene is built, so mixing a stale PLY or collision file fails immediately. The
+loader also parses the MJCF and requires ``collision.dependencies`` to match its
+external file references exactly; an omitted mesh/heightfield/texture or an unused
+declaration fails before scene compilation. The
+formal schema is ``src/mjlab/scene/schemas/scene_manifest.schema.json``.
+
+The same manifest can be supplied to training:
+
+.. code-block:: bash
+
+    uv run train Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth \
+        --scene-manifest /path/to/scene/manifest.json \
+        --env.scene.num-envs 4096
+
+The loader applies exactly the same translation and quaternion to the Gaussian
+asset and the collision root. It transforms the manifest's ``default`` spawn from
+scene coordinates into world coordinates and applies it to robot reset position and
+orientation. A manifest with one differently named spawn uses that entry; with
+multiple entries and no ``default``, select one explicitly:
+
+.. code-block:: bash
+
+    uv run play Mjlab-Velocity-Flat-Unitree-G1-3DGS \
+        --scene-manifest /path/to/scene/manifest.json \
+        --scene-spawn-point doorway
+
+For parallel environments, the transformed spawn pose is composed with the existing
+per-environment grid origins, so selecting one spawn does not stack all robots.
+
+G1 depth visual training
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The depth task reuses the YAM Vision path: the camera observation has shape
+``(B, 1, 48, 64)``, is clipped to ``0.05--5.0 m``, normalized to ``[0, 1]``, and
+encoded by ``SpatialSoftmaxCNNModel`` before fusion with proprioception. Both actor
+and critic initially consume the camera group. The action space and velocity command
+interface are unchanged.
+
+Run a one-environment configuration smoke test with the bundled room1 manifest:
+
+.. code-block:: bash
+
+    uv run train Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth \
+        --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+        --scene-spawn-point default \
+        --env.scene.num-envs 1 \
+        --agent.max-iterations 1
+
+Camera and terrain-height ray sensors currently share one MuJoCo Warp BVH. To keep
+the hidden physical plane out of the rendered 3DGS depth, this first visual task
+removes ``foot_height_scan`` and the two rewards that depend on it
+(``foot_clearance`` and ``foot_swing_height``). Contact, velocity tracking, posture,
+smoothness, and the remaining locomotion signals are preserved. P7 will add
+task-specific step-clearance metrics without merging hidden collision geometry into
+the visual camera context.
+
+Play a local velocity checkpoint in a manifest scene
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``play`` defaults to a trained agent, so a local run must provide
+``--checkpoint-file`` (or alternatively a W&B run). The following command loads a
+locally trained G1 velocity policy, room1's visual and collision assets, and the
+manifest's ``default`` spawn point:
+
+.. code-block:: bash
+
+    uv run play Mjlab-Velocity-Flat-Unitree-G1-3DGS \
+        --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+        --scene-spawn-point default \
+        --checkpoint-file \
+          logs/rsl_rl/g1_velocity/<run>/model_<iteration>.pt \
+        --num-envs 1 \
+        --viewer viser \
+        --collision-visible True
+
+Replace ``<run>`` and ``<iteration>`` with the local training output. For example,
+a completed run may contain ``model_29999.pt``. In Viser, enable the ``Twist``
+controls and press ``Zero`` to command static standing. The Collision control can
+be toggled at runtime under ``Visualization``.
+
+For scene-only debugging, add ``--agent zero`` and omit ``--checkpoint-file``.
+That mode sends zero joint actions and is not a closed-loop standing controller, so
+the robot may fall.
+
+For quick experiments without a manifest, the separate interfaces remain:
+
+.. code-block:: bash
+
+    uv run demo \
+        --use-3dgs True \
+        --gaussian-splat-file /path/to/scene/visual/splats.ply \
+        --collision-mjcf-file /path/to/scene/collision/collision.xml
+
+Do not combine either separate asset option (or ``--collision-keep-plane``) with
+``--scene-manifest``. ``--collision-visible`` is a viewer option and works with
+both input styles.
+
+Imported collision geoms are assigned to viewer group 3 and hidden by default in
+the bundled 3DGS tasks. Add ``--collision-visible True`` to inspect them, and use
+semi-transparent ``rgba`` values in the MJCF. ``--collision-keep-plane True``
+retains the plane for debugging; it is off by default to prevent double contacts.
+While Viser is running, ``Visualization > Collision > Enabled`` toggles group 3
+immediately. The equivalent ``Groups > Geoms > G3`` control remains available;
+the named Collision checkbox follows changes made through either control.
+
+The bundled room1 manual smoke test keeps all files belonging to the scene under
+one asset directory:
+
+.. code-block:: text
+
+    src/mjlab/asset_zoo/3dgs/room1/
+      manifest.json
+      point_cloud_2_transform.ply
+      collision/
+        collision.xml
+
+``collision.xml`` contains a ground box whose top is at ``z=0`` and six fixed
+pseudo-random cylinders. The fixed layout makes contact failures reproducible.
+It deliberately remains a separate file from the PLY because the PLY is visual
+data and the MJCF is physical data. Run the standard pretrained demo policy with
+both assets using:
+
+.. code-block:: bash
+
+    uv run tests/run_g1_3dgs_collision_demo.py
+
+The script loads ``manifest.json``, downloads or reuses the same checkpoint and
+motion as ``uv run demo``, selects ``Mjlab-Tracking-Flat-Unitree-G1-3DGS``, uses
+one robot, and enables the semi-transparent collision proxy for visual alignment
+inspection.
+
+P4 collision validation
+-----------------------
+
+The room1 collision regression drops a 0.2 m box for two simulated seconds. It
+requires a final center height of 95--105 mm, less than 0.5 mm steady-state height
+standard deviation, no more than 10 mm contact penetration, less than 0.01 m/s
+final vertical speed, and zero MuJoCo Warp overflow bits. It also initializes and
+steps the complete G1 velocity environment, including its foot contact and terrain
+height sensors.
+
+Holding only G1's default joint-position targets is not a balance controller: in a
+separate diagnostic the robot fell within approximately three seconds. Static
+standing acceptance therefore requires a closed-loop standing policy or checkpoint;
+it must not be claimed from an open-loop pose test. The pretrained tracking demo's
+continuous room1 run remains the current closed-loop robot smoke test.
 
 
 G1 flat-terrain video demo
@@ -129,9 +368,10 @@ G1 flat-terrain video demo
 
 ``Mjlab-Velocity-Flat-Unitree-G1-3DGS`` uses the normal flat G1 configuration
 for training. Its play configuration loads a 3DGS scene for native Viser display.
-The physical ground remains the MuJoCo plane and is hidden from Viser. When video
-recording is explicitly requested, an on-demand camera wraps the robot's tracking
-camera and composes the robot's visual meshes with the splats.
+Without ``--collision-mjcf-file``, the physical ground remains the MuJoCo plane and
+is hidden from Viser. When video recording is explicitly requested, an on-demand
+camera wraps the robot's tracking camera and composes the robot's visual meshes
+with the splats.
 
 Set the asset path when it differs from the local development default. The command
 line option takes precedence over ``MJLAB_G1_3DGS_ASSET``:
@@ -160,9 +400,9 @@ Then record the native MuJoCo Warp camera after selecting a checkpoint:
         --video-length 300 \
         --viewer viser
 
-The MP4 is written under ``<checkpoint-directory>/videos/play/``. This demo is
-for visual validation only: the Gaussian scene has no collision geometry, and
-the robot still walks on the flat MuJoCo plane.
+The MP4 is written under ``<checkpoint-directory>/videos/play/``. If no collision
+MJCF is supplied, the Gaussian scene remains visual-only and the robot walks on
+the flat MuJoCo plane.
 
 Viser loads the same normalized Gaussian data into its native interactive 3DGS
 renderer. The splats are rendered directly in the 3D viewport together with the

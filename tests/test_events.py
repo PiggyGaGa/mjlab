@@ -1,6 +1,6 @@
 """Tests for EventManager, special dr.* functions, and recomputation."""
 
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import mujoco
 import pytest
@@ -555,6 +555,41 @@ def test_reset_joints_by_offset(device):
   call_args = mock_entity.write_joint_state_to_sim.call_args
   joint_pos = call_args[0][0]
   assert torch.allclose(joint_pos, torch.ones_like(joint_pos) * 0.5)
+
+
+def test_reset_root_state_uniform_applies_scene_spawn_pose(device):
+  """Manifest spawn pose transforms the default root pose during reset."""
+  env = Mock()
+  env.num_envs = 1
+  env.device = device
+
+  mock_entity = Mock()
+  mock_entity.is_fixed_base = False
+  mock_entity.data.default_root_state = torch.tensor(
+    [[1.0, 0.0, 0.75, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+    device=device,
+  )
+  scene = MagicMock()
+  scene.__getitem__.return_value = mock_entity
+  scene.env_origins = torch.tensor([[10.0, 20.0, 0.5]], device=device)
+  scene.spawn_quaternion_wxyz = (2**-0.5, 0.0, 0.0, 2**-0.5)
+  env.scene = scene
+
+  events.reset_root_state_uniform(
+    env,
+    torch.tensor([0], device=device),
+    pose_range={},
+    velocity_range={},
+  )
+
+  pose = mock_entity.write_root_link_pose_to_sim.call_args.args[0]
+  torch.testing.assert_close(
+    pose[0, :3], torch.tensor([10.0, 21.0, 1.25], device=device)
+  )
+  torch.testing.assert_close(
+    pose[0, 3:],
+    torch.tensor([2**-0.5, 0.0, 0.0, 2**-0.5], device=device),
+  )
 
 
 # ===========================================================================

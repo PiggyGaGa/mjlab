@@ -12,6 +12,7 @@ import tyro
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
 from mjlab.rl import MjlabOnPolicyRunner, RslRlBaseRunnerCfg, RslRlVecEnvWrapper
+from mjlab.scene import apply_scene_manifest
 from mjlab.scripts._cli import maybe_print_top_level_help
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
@@ -27,6 +28,10 @@ class TrainConfig:
   env: ManagerBasedRlEnvCfg
   agent: RslRlBaseRunnerCfg
   registry_name: str | None = None
+  scene_manifest: str | None = None
+  """Versioned JSON manifest binding the 3DGS and collision scene assets."""
+  scene_spawn_point: str | None = None
+  """Named manifest spawn point; defaults to ``default``."""
   video: bool = False
   video_length: int = 200
   video_interval: int = 2000
@@ -181,6 +186,16 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
 def launch_training(task_id: str, args: TrainConfig | None = None):
   args = args or TrainConfig.from_task(task_id)
+
+  if args.scene_manifest is not None:
+    manifest = apply_scene_manifest(
+      args.env.scene,
+      args.scene_manifest,
+      spawn_point=args.scene_spawn_point,
+    )
+    print(f"[INFO] Using scene manifest: {manifest.source_path}")
+  elif args.scene_spawn_point is not None:
+    raise ValueError("--scene-spawn-point requires --scene-manifest")
 
   # Create log directory once before launching workers.
   log_root_path = (Path(args.log_root) / args.agent.experiment_name).resolve()

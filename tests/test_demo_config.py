@@ -1,5 +1,7 @@
 """Tests for bundled demo configuration resolution."""
 
+import pytest
+
 from mjlab.scripts.demo import DemoConfig, _resolve_demo_args
 
 
@@ -21,3 +23,8 @@ def test_demo_preserves_gaussian_splat_file_when_3dgs_is_enabled() -> None:
   assert task_id == "Mjlab-Tracking-Flat-Unitree-G1-3DGS"
   assert args.gaussian_splat_file == "/path/to/scene.ply"
   assert args.num_envs == 1
+
+
+def test_demo_rejects_scene_manifest_when_3dgs_is_disabled() -> None:
+  with pytest.raises(ValueError, match="requires --use-3dgs"):
+    _resolve_demo_args(DemoConfig(use_3dgs=False, scene_manifest="scene.json"))

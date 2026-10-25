@@ -1,14 +1,16 @@
 """Shared G1 3DGS play configuration."""
 
 import os
+from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.scene import GaussianSplatAssetCfg, GaussianSplatSceneCfg
 from mjlab.sensor import CameraSensorCfg, TerrainHeightSensorCfg
 
 G1_3DGS_VIDEO_SENSOR = "g1_3dgs_video"
-_DEFAULT_G1_3DGS_ASSET = (
-  "/home/liana/SSD/Ubuntu/robot/exp-3DGS/1012/1012/point_cloud_2_transform.ply"
+_DEFAULT_G1_3DGS_ASSET = str(
+  Path(__file__).resolve().parents[1]
+  / "asset_zoo/3dgs/room1/point_cloud_2_transform.ply"
 )
 
 

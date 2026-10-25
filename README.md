@@ -60,16 +60,45 @@ This creates a foundation for several robotics directions:
 - task-aware scene simplification that balances contact quality, visual fidelity,
   training throughput, and memory use.
 
-The current milestone provides native visualization and sensor integration while
-using a hidden MuJoCo plane for contact. Automatic collision-proxy generation and
-training directly against reconstructed scene geometry are planned next. Run the
-pretrained G1 tracking demo with a Graphdeco-style PLY file:
+The current milestone provides native visualization and sensor integration plus a
+collision-only MJCF input for externally prepared primitives, convex meshes, and
+heightfields. Automatic collision-proxy generation from 3DGS remains planned. Run
+the pretrained G1 tracking demo with aligned visual and collision assets:
 
 ```bash
 uv run demo \
   --use-3dgs True \
-  --gaussian-splat-file /path/to/point_cloud.ply
+  --scene-manifest /path/to/scene/manifest.json
 ```
+
+The versioned manifest binds relative visual and collision paths, SHA-256
+fingerprints, coordinate conventions, one shared world transform, and spawn-point
+metadata. The loader checks that its dependency list exactly matches every file
+referenced by the collision MJCF. The spawn named ``default`` is applied to robot
+resets; choose another with ``--scene-spawn-point NAME``. For ad-hoc experiments,
+the independent ``--gaussian-splat-file`` and
+``--collision-mjcf-file`` options remain available; they cannot be combined with
+``--scene-manifest``.
+
+The repository also includes a reproducible room1 smoke scene with a flat
+collision floor and six fixed pseudo-random pillars:
+
+```bash
+uv run tests/run_g1_3dgs_collision_demo.py
+```
+
+To play a locally trained G1 velocity policy in the same manifest scene:
+
+```bash
+uv run play Mjlab-Velocity-Flat-Unitree-G1-3DGS \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+  --scene-spawn-point default \
+  --checkpoint-file logs/rsl_rl/g1_velocity/<run>/model_<iteration>.pt \
+  --num-envs 1 --viewer viser --collision-visible True
+```
+
+During Viser playback, use ``Visualization > Collision > Enabled`` to show or
+hide the collision proxy without restarting the simulation.
 
 See the [3D Gaussian Splatting guide](https://mujocolab.github.io/mjlab/main/source/sensors/gaussian_splats.html)
 for scene configuration, training, playback, multiple robots, recording, and

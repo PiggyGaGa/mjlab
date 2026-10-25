@@ -133,7 +133,9 @@ Play 启动时必须验证：
 - 支持 reset 当前环境。
 - 支持速度调整和恢复实时速度。
 - 支持选择要显示的环境索引。
-- 支持切换是否显示碰撞代理和现有调试图元。
+- 在 Viser ``Visualization`` 面板提供 ``Collision > Enabled`` 开关，
+  运行中实时切换 group 3 碰撞代理；其状态与 ``Groups > Geoms > G3``
+  保持同步。
 - 适用时保留 reward 与 metric 曲线。
 
 ### PL-FR-5：多环境
@@ -240,6 +242,11 @@ reset 后机器人状态继续更新，静态 splat 不重复上传。
 - PL-T1.5：增加错误配置和资源释放测试。
 
 依赖：Play Phase 0。
+
+当前进度：已实现 schema v1 manifest 的相对路径、SHA-256、坐标系和
+统一 transform 校验，并通过 ``--scene-manifest`` 接入 Play/demo；原有
+``--gaussian-splat-file`` 与 ``--collision-mjcf-file`` 继续作为互斥的
+临时实验入口。checkpoint 与场景兼容性元数据仍待补充。
 
 ### Play Phase 2：Viser 原生 3DGS 显示
 

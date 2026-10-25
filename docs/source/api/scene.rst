@@ -12,6 +12,7 @@ mjlab.scene
   - :class:`SceneCfg`
   - :class:`GaussianSplatAssetCfg`
   - :class:`GaussianSplatSceneCfg`
+  - :class:`SceneManifest`
 
 Scene
 -----
@@ -34,3 +35,22 @@ Scene
 .. autoclass:: GaussianSplatSceneCfg
   :members:
   :exclude-members: __init__
+
+Scene manifests
+---------------
+
+.. autoclass:: SceneManifest
+  :members:
+
+.. autoclass:: SceneManifestAsset
+  :members:
+
+.. autoclass:: SceneManifestFile
+  :members:
+
+.. autoclass:: SceneSpawnPoint
+  :members:
+
+.. autofunction:: load_scene_manifest
+
+.. autofunction:: apply_scene_manifest

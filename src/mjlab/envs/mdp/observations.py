@@ -8,7 +8,7 @@ import torch
 
 from mjlab.entity import Entity
 from mjlab.managers.scene_entity_config import SceneEntityCfg
-from mjlab.sensor import BuiltinSensor, RayCastSensor
+from mjlab.sensor import BuiltinSensor, CameraSensor, RayCastSensor
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -104,6 +104,23 @@ def builtin_sensor(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   sensor = env.scene[sensor_name]
   assert isinstance(sensor, BuiltinSensor)
   return sensor.data
+
+
+def camera_depth(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  cutoff_distance: float,
+  min_depth: float = 0.01,
+) -> torch.Tensor:
+  """Normalized camera depth in CNN-compatible ``(B, 1, H, W)`` format."""
+  sensor = env.scene[sensor_name]
+  assert isinstance(sensor, CameraSensor), (
+    f"camera_depth requires a CameraSensor, got {type(sensor).__name__}"
+  )
+  depth = sensor.data.depth
+  assert depth is not None, f"Camera '{sensor_name}' has no depth data"
+  depth = depth.permute(0, 3, 1, 2)
+  return torch.clamp(depth, min=min_depth, max=cutoff_distance) / cutoff_distance
 
 
 def projected_gravity_from_sensor(

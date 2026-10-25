@@ -10,5 +10,11 @@ from mjlab.scene.gaussian_splat import (
 from mjlab.scene.gaussian_splat import (
   load_gaussian_splat_scene as load_gaussian_splat_scene,
 )
+from mjlab.scene.manifest import SceneManifest as SceneManifest
+from mjlab.scene.manifest import SceneManifestAsset as SceneManifestAsset
+from mjlab.scene.manifest import SceneManifestFile as SceneManifestFile
+from mjlab.scene.manifest import SceneSpawnPoint as SceneSpawnPoint
+from mjlab.scene.manifest import apply_scene_manifest as apply_scene_manifest
+from mjlab.scene.manifest import load_scene_manifest as load_scene_manifest
 from mjlab.scene.scene import Scene as Scene
 from mjlab.scene.scene import SceneCfg as SceneCfg

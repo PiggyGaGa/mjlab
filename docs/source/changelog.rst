@@ -8,6 +8,21 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added a versioned JSON scene manifest that binds a 3DGS PLY and collision MJCF,
+  verifies SHA-256 fingerprints and bundle-local paths, and applies one shared
+  world transform. ``train``, ``play``, and ``demo`` accept ``--scene-manifest``;
+  the existing independent PLY and collision options remain available. Manifest
+  loading now verifies that declared collision dependencies exactly match MJCF file
+  references and applies the selected spawn point to robot reset position and
+  orientation. ``--scene-spawn-point`` selects a non-default named spawn.
+- Added collision-only MJCF terrain input for static primitives, convex meshes,
+  and heightfields. ``play`` and ``demo`` accept ``--collision-mjcf-file``, can
+  explicitly retain the fallback plane, and can expose collision geoms in viewer
+  group 3 for alignment debugging. Training can select the same input through
+  ``TerrainEntityCfg(terrain_type="mjcf")``. A bundled room1 manual smoke script
+  runs the pretrained G1 demo against a ground-and-pillars collision scene. Viser's
+  Visualization panel includes a live Collision checkbox synchronized with geom
+  group 3.
 - Added static 3D Gaussian Splatting assets for RGB-D camera observations through
   MuJoCo Warp's native splat renderer. ``GaussianSplatAssetCfg`` loads Graphdeco-style
   PLY files with filtering and world transforms, while ``GaussianSplatSceneCfg``
@@ -58,6 +73,14 @@ Changed
 Fixed
 ^^^^^
 
+- External MJCF terrain now keeps the conventional ``terrain`` root body used by
+  contact sensors, and terrain-height ray sensors automatically follow the
+  external terrain's geom group. G1 velocity environments previously missed the
+  external ground and could build an empty raycast BVH.
+- Collision-only MJCF files with geoms directly under ``<worldbody>`` are now
+  wrapped in a static ``terrain`` root body before entity initialization. They
+  previously compiled successfully but crashed Play with an ``IndexError`` while
+  computing terrain indexing.
 - ``demo --use-3dgs False`` now ignores ``--gaussian-splat-file`` instead of
   applying it to the non-3DGS tracking task.
 - Play video examples now pass the explicit ``True`` value required by the project's

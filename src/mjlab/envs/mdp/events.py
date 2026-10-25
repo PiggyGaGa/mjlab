@@ -55,6 +55,28 @@ def resolve_env_ids(
   return env_ids
 
 
+def _apply_scene_spawn_orientation(
+  env: ManagerBasedRlEnv, orientations: torch.Tensor
+) -> torch.Tensor:
+  spawn_quat = torch.tensor(
+    env.scene.spawn_quaternion_wxyz,
+    device=env.device,
+    dtype=orientations.dtype,
+  ).expand_as(orientations)
+  return quat_mul(spawn_quat, orientations)
+
+
+def _apply_scene_spawn_position(
+  env: ManagerBasedRlEnv, positions: torch.Tensor
+) -> torch.Tensor:
+  spawn_quat = torch.tensor(
+    env.scene.spawn_quaternion_wxyz,
+    device=env.device,
+    dtype=positions.dtype,
+  ).expand((len(positions), 4))
+  return quat_apply(spawn_quat, positions)
+
+
 def randomize_terrain(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
   """Randomize the sub-terrain for each environment on reset.
 
@@ -90,13 +112,24 @@ def reset_scene_to_default(
       # Fixed-base mocap entity - reset mocap pose with env_origins.
       default_root_state = entity.data.default_root_state[env_ids].clone()
       mocap_pose = torch.zeros((len(env_ids), 7), device=env.device)
-      mocap_pose[:, 0:3] = default_root_state[:, 0:3] + env.scene.env_origins[env_ids]
-      mocap_pose[:, 3:7] = default_root_state[:, 3:7]
+      mocap_pose[:, 0:3] = (
+        _apply_scene_spawn_position(env, default_root_state[:, 0:3])
+        + env.scene.env_origins[env_ids]
+      )
+      mocap_pose[:, 3:7] = _apply_scene_spawn_orientation(
+        env, default_root_state[:, 3:7]
+      )
       entity.write_mocap_pose_to_sim(mocap_pose, env_ids=env_ids)
     elif not entity.is_fixed_base:
       # Floating-base entity - reset root state with env_origins.
       default_root_state = entity.data.default_root_state[env_ids].clone()
-      default_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+      default_root_state[:, 0:3] = (
+        _apply_scene_spawn_position(env, default_root_state[:, 0:3])
+        + env.scene.env_origins[env_ids]
+      )
+      default_root_state[:, 3:7] = _apply_scene_spawn_orientation(
+        env, default_root_state[:, 3:7]
+      )
       entity.write_root_state_to_sim(default_root_state, env_ids=env_ids)
 
     # Reset joint state for articulated entities.
@@ -154,12 +187,14 @@ def reset_root_state_uniform(
     root_states = default_root_state[env_ids].clone()
 
     positions = (
-      root_states[:, 0:3] + pose_samples[:, 0:3] + env.scene.env_origins[env_ids]
+      _apply_scene_spawn_position(env, root_states[:, 0:3] + pose_samples[:, 0:3])
+      + env.scene.env_origins[env_ids]
     )
     orientations_delta = quat_from_euler_xyz(
       pose_samples[:, 3], pose_samples[:, 4], pose_samples[:, 5]
     )
     orientations = quat_mul(root_states[:, 3:7], orientations_delta)
+    orientations = _apply_scene_spawn_orientation(env, orientations)
 
     asset.write_mocap_pose_to_sim(
       torch.cat([positions, orientations], dim=-1), env_ids=env_ids
@@ -172,12 +207,14 @@ def reset_root_state_uniform(
   root_states = default_root_state[env_ids].clone()
 
   positions = (
-    root_states[:, 0:3] + pose_samples[:, 0:3] + env.scene.env_origins[env_ids]
+    _apply_scene_spawn_position(env, root_states[:, 0:3] + pose_samples[:, 0:3])
+    + env.scene.env_origins[env_ids]
   )
   orientations_delta = quat_from_euler_xyz(
     pose_samples[:, 3], pose_samples[:, 4], pose_samples[:, 5]
   )
   orientations = quat_mul(root_states[:, 3:7], orientations_delta)
+  orientations = _apply_scene_spawn_orientation(env, orientations)
 
   # Velocities.
   vel_samples = _sample_se3_range(velocity_range, (len(env_ids), 6), env.device)
@@ -255,6 +292,7 @@ def reset_root_state_from_flat_patches(
     pose_samples[:, 3], pose_samples[:, 4], pose_samples[:, 5]
   )
   orientations = quat_mul(root_states[:, 3:7], orientations_delta)
+  orientations = _apply_scene_spawn_orientation(env, orientations)
 
   if asset.is_fixed_base:
     if not asset.is_mocap:

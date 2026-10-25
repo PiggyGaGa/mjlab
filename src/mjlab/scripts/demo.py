@@ -23,6 +23,8 @@ class DemoConfig(PlayConfig):
 
 def _resolve_demo_args(args: DemoConfig) -> tuple[str, DemoConfig]:
   """Resolve task-specific demo defaults and discard inactive 3DGS options."""
+  if not args.use_3dgs and args.scene_manifest is not None:
+    raise ValueError("--scene-manifest requires --use-3dgs True")
   if args.num_envs is None:
     args = replace(args, num_envs=1 if args.use_3dgs else 8)
   if not args.use_3dgs and args.gaussian_splat_file is not None:

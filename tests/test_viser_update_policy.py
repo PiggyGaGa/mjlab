@@ -1,6 +1,7 @@
 """Tests for Viser viewer update-policy helpers."""
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -120,6 +121,47 @@ def test_scene_adds_native_gaussian_splats_and_tracks_world_offset():
   np.testing.assert_array_equal(handle.position, [4.0, 5.0, 6.0])
   assert handle.visible
   assert not scene.geom_groups_visible[0]
+
+
+def test_collision_visualization_toggle_updates_group_three_handles():
+  model = mujoco.MjModel.from_xml_string(
+    """
+    <mujoco>
+      <worldbody>
+        <geom name="collision" type="box" size="1 1 .1" group="3"/>
+      </worldbody>
+    </mujoco>
+    """
+  )
+  server = MagicMock()
+  scene = MjlabViserScene(
+    server,
+    model,
+    num_envs=1,
+    geom_groups_visible=(1, 1, 1, 0, 0, 0),
+  )
+
+  assert not scene.collision_visible
+  assert scene._fixed_geom_handles
+  assert all(not handle.visible for handle in scene._fixed_geom_handles.values())
+
+  scene.set_collision_visible(True)
+
+  assert scene.collision_visible
+  assert all(handle.visible for handle in scene._fixed_geom_handles.values())
+
+  scene.create_overlay_gui()
+  server.gui.add_folder.assert_any_call("Collision")
+  checkbox = scene._collision_visibility_checkbox
+  assert checkbox is not None
+  scene.geom_groups_visible[3] = True
+  scene._sync_visibilities()
+  assert checkbox.value is True
+  callback = checkbox.on_update.call_args_list[-1].args[0]
+  callback(SimpleNamespace(target=SimpleNamespace(value=False)))
+
+  assert not scene.collision_visible
+  assert all(not handle.visible for handle in scene._fixed_geom_handles.values())
 
 
 def test_debug_overlays_env_switch_and_queue():

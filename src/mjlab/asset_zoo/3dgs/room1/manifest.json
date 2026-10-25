@@ -1,0 +1,32 @@
+{
+  "$schema": "../../../scene/schemas/scene_manifest.schema.json",
+  "schema_version": 1,
+  "coordinate_system": {
+    "handedness": "right",
+    "up_axis": "z",
+    "length_unit": "meter"
+  },
+  "visual": {
+    "type": "3dgs_ply",
+    "path": "point_cloud_2_transform.ply",
+    "sha256": "6a5bf5d5e8021701f8aa1ee2e93388f7a5d5181f13c0701fe73121e2a974f729"
+  },
+  "collision": {
+    "type": "mjcf",
+    "path": "collision/collision.xml",
+    "sha256": "10c9b592ebc9293602acc37fbfde1bf94ad96e0283f86a4e0c60ad1ee3a58570",
+    "geom_group": 3,
+    "dependencies": []
+  },
+  "world_from_scene": {
+    "position": [0.0, 0.0, 0.0],
+    "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]
+  },
+  "spawn_points": [
+    {
+      "name": "default",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]
+    }
+  ]
+}

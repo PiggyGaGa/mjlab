@@ -37,6 +37,7 @@ from mjlab.viewer.model_sync import (
 
 _Z_AXIS = np.array([0.0, 0.0, 1.0])
 _IDENTITY_QUAT = np.array([1.0, 0.0, 0.0, 0.0])
+_COLLISION_GEOM_GROUP = 3
 _VISER_GEOMETRY_HANDLE_FIELDS = frozenset(
   {
     "geom_dataid",
@@ -236,6 +237,7 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
     gaussian_splats: GaussianSplatData | None = None,
     geom_groups_visible: tuple[int, int, int, int, int, int] | None = None,
   ) -> None:
+    self._collision_visibility_checkbox: Any | None = None
     self._sim_model = sim_model
     self._expanded_fields = expanded_fields or set()
     self._baked_appearance_fields = (
@@ -338,6 +340,23 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
 
     # MjData used for ghost forward kinematics.
     self._viz_data = mujoco.MjData(mj_model)
+
+  @property
+  def collision_visible(self) -> bool:
+    """Whether collision geoms in viewer group 3 are visible."""
+    return self.geom_groups_visible[_COLLISION_GEOM_GROUP]
+
+  def set_collision_visible(self, visible: bool) -> None:
+    """Show or hide collision geoms immediately without rebuilding the scene."""
+    self.geom_groups_visible[_COLLISION_GEOM_GROUP] = bool(visible)
+    self._sync_visibilities()
+
+  @override
+  def _sync_visibilities(self) -> None:
+    super()._sync_visibilities()
+    checkbox = self._collision_visibility_checkbox
+    if checkbox is not None and checkbox.value != self.collision_visible:
+      checkbox.value = self.collision_visible
 
   # Properties.
 
@@ -836,6 +855,24 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
       self.needs_update = True
 
   # GUI.
+
+  @override
+  def create_overlay_gui(self) -> None:
+    """Add standard overlays and a named collision visibility control."""
+    super().create_overlay_gui()
+
+    with self.server.gui.add_folder("Collision"):
+      self._collision_visibility_checkbox = self.server.gui.add_checkbox(
+        "Enabled",
+        initial_value=self.collision_visible,
+        hint="Show or hide collision geoms in viewer group 3.",
+      )
+
+      @self._collision_visibility_checkbox.on_update
+      def _(event) -> None:
+        self._apply_visualization_change(
+          lambda: self.set_collision_visible(event.target.value)
+        )
 
   @override
   def create_scene_gui(

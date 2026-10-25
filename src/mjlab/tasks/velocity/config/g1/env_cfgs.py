@@ -8,8 +8,10 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.sensor import (
+  CameraSensorCfg,
   ContactMatch,
   ContactSensorCfg,
   ObjRef,
@@ -17,7 +19,11 @@ from mjlab.sensor import (
   RingPatternCfg,
   TerrainHeightSensorCfg,
 )
-from mjlab.tasks.g1_3dgs import apply_g1_3dgs_play_cfg
+from mjlab.tasks.g1_3dgs import (
+  G1_3DGS_DEPTH_SENSOR,
+  apply_g1_3dgs_play_cfg,
+  apply_g1_3dgs_scene_cfg,
+)
 from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
@@ -234,3 +240,63 @@ def unitree_g1_flat_3dgs_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   if not play:
     return cfg
   return apply_g1_3dgs_play_cfg(cfg)
+
+
+def unitree_g1_flat_3dgs_depth_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """Create the G1 3DGS depth-training configuration using the YAM vision path."""
+  cfg = unitree_g1_flat_env_cfg(play=play)
+
+  cfg.sim.mujoco.iterations = 20
+  cfg.sim.mujoco.ls_iterations = 40
+  apply_g1_3dgs_scene_cfg(cfg)
+
+  # The policy camera is rigidly attached near the head and looks 20 degrees
+  # downward along the robot's forward (+X) direction. Only robot visual geoms are
+  # rasterized; the Gaussian scene supplies the environment appearance and depth.
+  camera = CameraSensorCfg(
+    name=G1_3DGS_DEPTH_SENSOR,
+    parent_body="robot/torso_link",
+    pos=(0.08, 0.0, 0.42),
+    quat=(0.579228, 0.40558, -0.40558, -0.579228),
+    fovy=70.0,
+    width=64,
+    height=48,
+    data_types=("depth",),
+    enabled_geom_groups=(2,),
+    use_shadows=False,
+    use_textures=True,
+  )
+
+  # Camera and ray sensors share one MJWarp render context. The flat task's
+  # critic-only foot ray sensor targets the hidden plane, which would otherwise add
+  # that plane to the camera BVH and obscure the Gaussian ground. Contact-based
+  # privileged observations remain available to the critic.
+  cfg.scene.sensors = tuple(
+    sensor for sensor in (cfg.scene.sensors or ()) if sensor.name != "foot_height_scan"
+  ) + (camera,)
+  cfg.observations["critic"].terms.pop("foot_height", None)
+  cfg.rewards.pop("foot_clearance", None)
+  cfg.rewards.pop("foot_swing_height", None)
+
+  cfg.observations["camera"] = ObservationGroupCfg(
+    terms={
+      "depth": ObservationTermCfg(
+        func=envs_mdp.camera_depth,
+        params={
+          "sensor_name": G1_3DGS_DEPTH_SENSOR,
+          "cutoff_distance": 5.0,
+          "min_depth": 0.05,
+        },
+      )
+    },
+    concatenate_terms=True,
+    enable_corruption=False,
+    nan_policy="error",
+  )
+
+  if play:
+    cfg.viewer.geom_group = (0, 1, 1, 0, 0, 0)
+
+  return cfg

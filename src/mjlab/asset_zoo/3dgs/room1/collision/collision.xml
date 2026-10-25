@@ -1,0 +1,31 @@
+<mujoco model="room1_collision_test">
+  <default>
+    <geom
+      group="3"
+      contype="1"
+      conaffinity="1"
+      condim="3"
+      friction="1.0 0.005 0.0001"
+      rgba="0.15 0.75 0.25 0.30"
+    />
+  </default>
+
+  <worldbody>
+    <!-- The top surface is at z=0, matching the robot's original flat plane. -->
+    <geom
+      name="ground"
+      type="box"
+      pos="0 0 -0.05"
+      size="10 10 0.05"
+      rgba="0.25 0.45 0.85 0.20"
+    />
+
+    <!-- Fixed pseudo-random layout (seeded once and committed for reproducibility). -->
+    <geom name="pillar_00" type="cylinder" pos="2.20 0.90 0.70" size="0.22 0.70"/>
+    <geom name="pillar_01" type="cylinder" pos="-2.35 1.35 0.95" size="0.28 0.95"/>
+    <geom name="pillar_02" type="cylinder" pos="1.55 -2.40 0.80" size="0.19 0.80"/>
+    <geom name="pillar_03" type="cylinder" pos="-1.80 -2.10 0.60" size="0.25 0.60"/>
+    <geom name="pillar_04" type="cylinder" pos="3.10 -1.20 1.10" size="0.17 1.10"/>
+    <geom name="pillar_05" type="cylinder" pos="-3.00 -0.45 0.75" size="0.21 0.75"/>
+  </worldbody>
+</mujoco>

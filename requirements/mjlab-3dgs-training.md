@@ -123,8 +123,9 @@ Play 模块只能依赖公开的环境构建 API、场景 manifest 和 checkpoin
 - 高阶视角相关球谐若不支持，必须显式告警或拒绝，不能静默误解释。
 - 必须拒绝缺失字段、NaN/Inf、非法尺度、非法四元数和空资产。
 - 支持 opacity、尺度、包围盒和最大 splat 数量过滤。
-- 规范化缓存包含 schema、源指纹和全部转换参数。
-- 缓存写入必须是原子的；源数据或参数变化时必须失效。
+- 后期可选的规范化缓存应包含 schema、源指纹和全部转换参数。
+- 启用缓存时必须原子写入，并在源数据或参数变化时失效；缓存不作为
+  首版视觉训练的前置条件。
 
 ### TR-FR-2：坐标与单位
 
@@ -206,6 +207,176 @@ Play 模块只能依赖公开的环境构建 API、场景 manifest 和 checkpoin
 - MVP 中所有并行 world 共享同一套静态碰撞资产。不同 world 使用不同碰撞场景
   属于后续的多场景扩展。
 
+#### TR-FR-4A.1：视觉与碰撞资产关系
+
+- PLY 和碰撞资产是同一个逻辑场景的两种表示，不互相包含。
+  PLY 只保存
+  Gaussian 视觉数据，`collision.xml` 只保存物理几何与接触属性。
+- MVP 中一个场景对应一个 PLY 和一个 collision-only MJCF。一个 MJCF 可以
+  引用零个或多个 mesh、heightfield，并可直接包含多个 primitive geom。
+- collision mesh 是 `collision.xml` 的私有依赖，不应由 PLY 直接
+  引用，也不应当作高保真视觉 mesh 使用。
+- PLY 与碰撞 MJCF 必须已经处于相同的 scene-local 坐标系：
+  右手系、Z-up、
+  单位为米、相同原点。MVP 的运行时 scale 固定为 `1.0`。
+- 非单位缩放必须在预处理阶段同时烘焙进 PLY 和全部碰撞几何。
+  仅缩放 PLY 或
+  仅通过 mesh scale 缩放部分碰撞几何均视为资产不匹配。
+- manifest 对视觉和碰撞共同应用 world-from-scene 平移和旋转；不得
+  为二者分别配置两个独立 transform。
+
+#### TR-FR-4A.2：标准资产目录
+
+标准场景包采用以下布局：
+
+```text
+scene_name/
+  manifest.json              # 推荐的统一入口；也保留两个临时独立入口
+  visual/
+    splats.ply
+  collision/
+    collision.xml            # 唯一物理入口
+    meshes/
+      ground_000.obj
+      stair_000.obj
+      wall_000.obj
+    heightfields/
+      terrain.png
+  reports/
+    collision_report.json
+```
+
+- `collision.xml` 中的所有文件路径必须相对 XML 所在目录，不允许
+  绝对路径或
+  `..` 路径逃逸。
+- 推荐在 `<compiler>` 中设置 `meshdir="meshes"`。heightfield 路径
+  按同样原则
+  保持在 `collision/heightfields/` 下。
+- mesh 文件名和 MJCF asset name 在一个场景包内必须唯一、稳定且
+  有语义；推荐
+  使用 `ground_000`、`stair_000`、`wall_000` 等名称。
+- 一个需要保持凹结构的场景必须拆成多个凸部件。每个凸部件
+  使用
+  独立 mesh asset 和 geom；不得把多个凸部件放进一个文件后依赖
+  object/group 名称，因为 MuJoCo
+  会把一个 mesh asset 作为一个碰撞对象处理。
+- primitive 不需要额外文件，应直接写在 `collision.xml`；
+  heightfield 和 mesh
+  只有在确实需要时才创建对应子目录。
+- 碰撞文件不需要纹理、UV、高阶材质或视觉细节。法线可保留用于
+  检查，但物理
+  正确性以顶点、面、闭合性和凸性要求为准。
+
+`manifest.json` 是 mjlab 为 3DGS 视觉/物理场景定义的版本化契约，
+不是 3DGS、MuJoCo 或机器人社区的通用标准。选择 JSON 是因为本项目
+已有 manifest 需求，JSON 跨语言、便于 schema 校验，且 Python
+标准库可以直接读取。分开传入 PLY 和 MJCF 的接口继续用于临时实验；
+P5 提供以下推荐绑定层：
+
+```json
+{
+  "schema_version": 1,
+  "coordinate_system": {
+    "handedness": "right",
+    "up_axis": "z",
+    "length_unit": "meter"
+  },
+  "visual": {
+    "type": "3dgs_ply",
+    "path": "visual/splats.ply",
+    "sha256": "..."
+  },
+  "collision": {
+    "type": "mjcf",
+    "path": "collision/collision.xml",
+    "sha256": "...",
+    "geom_group": 3,
+    "dependencies": []
+  },
+  "world_from_scene": {
+    "position": [0.0, 0.0, 0.0],
+    "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]
+  },
+  "spawn_points": [{
+    "name": "default",
+    "position": [0.0, 0.0, 0.0],
+    "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]
+  }]
+}
+```
+
+manifest 的作用不是参与渲染或碰撞计算，而是提供唯一入口、
+绑定相对路径、坐标约定、版本和文件指纹，避免用户把错误版本的
+PLY 与
+碰撞资产组合在一起。
+
+当前实现提供 schema v1、严格字段和相对路径校验、主文件及 dependency
+的 SHA-256 校验，并自动核对 MJCF 引用与 dependency 声明完全一致；
+``world_from_scene`` 同时应用于 PLY、MJCF 固定根和出生点。
+Play/demo/train 均接受 ``--scene-manifest`` 和可选的
+``--scene-spawn-point``。为防止两套来源产生歧义，manifest 不得与
+``--gaussian-splat-file``、
+``--collision-mjcf-file`` 或 ``--collision-keep-plane`` 同时使用；独立接口
+本身继续保留。选中的出生点已经接入机器人 reset/origin。
+
+一个仅包含静态碰撞的最小 MJCF 结构为：
+
+```xml
+<mujoco model="scene_collision">
+  <compiler angle="radian" meshdir="meshes"/>
+  <default>
+    <default class="scene_collision">
+      <geom group="3" contype="1" conaffinity="1" condim="3"
+            friction="1.0 0.005 0.0001" rgba="0.2 0.8 0.2 0.25"/>
+    </default>
+  </default>
+  <asset>
+    <mesh name="stair_000" file="stair_000.obj"/>
+  </asset>
+  <worldbody>
+    <body name="scene_collision">
+      <geom name="stair_000" class="scene_collision"
+            type="mesh" mesh="stair_000"/>
+      <geom name="ground" class="scene_collision"
+            type="box" pos="0 0 -0.05" size="5 5 0.05"/>
+    </body>
+  </worldbody>
+</mujoco>
+```
+
+该 MJCF 不得包含 free joint、actuator、sensor、机器人、训练配置或
+Gaussian 数据。顶层静态 body 不添加 joint，因此由 MuJoCo 作为固定
+环境处理。
+
+#### TR-FR-4A.3：mjlab 接入位置
+
+- 外部 collision MJCF 应作为 terrain/static world geometry 接入，
+  而不是使用普通 `EntityCfg`。普通固定 entity 会被 mjlab 自动包装成
+  mocap body，不适合
+  大型静态环境。
+- MVP 扩展 `TerrainEntityCfg.terrain_type`，增加 `"mjcf"` 类型和 MJCF 路径。
+- `terrain_type="plane"` 与 `terrain_type="mjcf"` 天然互斥，因此
+  不再需要同时加载一个隐藏 plane。显式调试共存应作为后续独立
+  选项，而不是默认行为。
+- 加载必须使用 `mujoco.MjSpec.from_file()`，保留 XML 所在目录，使
+  `<compiler meshdir="meshes">` 和相对引用正常解析。
+- 首版环境原点继续使用现有 grid spacing。外部场景为所有 MJWarp
+  world 共享的
+  静态模型；机器人通过各 world 的 env origin/reset 配置放置。
+- `TerrainEntityCfg` 的 MVP 公共字段为 `terrain_type="mjcf"`、
+  `mjcf_path`、`mjcf_keep_plane=False` 和 `mjcf_geom_group=3`。
+  `mjcf_geom_group=None` 时保留源 MJCF 的 group；默认 group 3 便于
+  独立控制碰撞代理可见性。
+- Play/demo 通过 `--collision-mjcf-file` 覆盖 terrain，
+  `--collision-keep-plane True` 仅用于显式调试，
+  `--collision-visible True` 显示 group 3。训练使用等价的
+  `--env.scene.terrain.terrain-type mjcf` 和
+  `--env.scene.terrain.mjcf-path`。
+- friction、`condim`、priority、`contype` 和 `conaffinity` 以
+  `collision.xml` 为数据源，MVP 加载器不静默覆盖这些物理属性。
+- MVP 拒绝 MJCF `<include>`，以便单入口文件的所有外部依赖都能在加载
+  前完成路径检查；如后续支持 include，必须递归执行同一目录边界校验。
+
 ### TR-FR-5：碰撞质量
 
 - 输出输入/保留 splat 数、顶点/面数、连通分量、包围盒和简化比例。
@@ -213,6 +384,10 @@ Play 模块只能依赖公开的环境构建 API、场景 manifest 和 checkpoin
 - 提供 3DGS 与半透明碰撞代理的叠加预览。
 - 输出碰撞表面到高置信度 Gaussian 样本的距离统计。
 - 提供落体、静态接触、机器人站立或行走的物理冒烟测试。
+- 当前 room1 落箱测试已量化验证稳态高度、抖动、穿透、末速度和
+  MJWarp overflow；G1 velocity 环境的 contact/terrain-height sensor 初始化
+  与单步已通过。开环默认关节目标不能维持 G1 站立，静态站立验收必须
+  使用闭环策略或 checkpoint。
 - 不得出现主要地面穿透、不可接受抖动或数值爆炸。
 
 ### TR-FR-6：训练场景配置
@@ -241,7 +416,7 @@ Play 模块只能依赖公开的环境构建 API、场景 manifest 和 checkpoin
 
 - 导入、碰撞生成和校验提供独立命令行入口及 `--help`。
 - 长任务显示阶段和进度。
-- 失败时不留下可被误认为有效的完整缓存。
+- 启用可选缓存时，失败不得留下可被误认为有效的完整缓存。
 - 缺少可选依赖时给出明确安装说明。
 - 视觉/碰撞 manifest 不匹配时 fail fast。
 - splat 超限、显存不足和格式不兼容时给出上下文信息。
@@ -351,10 +526,10 @@ G1 的安全可达范围通过冒烟测试确认后再固定。
 
 ## 8. 验收标准
 
-### TR-AC-1：导入与缓存
+### TR-AC-1：导入
 
-小型标准 PLY 能生成缓存和 manifest；重复运行命中缓存；修改源或参数后
-缓存失效。非法输入产生明确错误。
+小型标准 PLY 能被严格校验、规范化并通过 manifest 加载；非法输入产生
+明确错误。缓存命中与失效验证延后到性能优化阶段。
 
 ### TR-AC-2：渲染观测
 
@@ -415,7 +590,7 @@ PLY 时继续使用显式选择的 plane fallback；配置外部碰撞时机器�
 - TR-T1.2：实现安全 PLY 读取和严格校验。
 - TR-T1.3：实现 Gaussian 字段规范化。
 - TR-T1.4：实现过滤、坐标变换和统计。
-- TR-T1.5：实现指纹、缓存和原子写入。
+- TR-T1.5：实现资产指纹；缓存和原子写入延后到性能优化阶段。
 - TR-T1.6：增加 CLI、fixture 和单元测试。
 
 依赖：Training Phase 0。

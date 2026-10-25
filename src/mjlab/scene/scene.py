@@ -17,7 +17,13 @@ from mjlab.scene.gaussian_splat import (
   GaussianSplatSceneCfg,
   load_gaussian_splat_scene,
 )
-from mjlab.sensor import BuiltinSensor, RayCastSensor, Sensor, SensorCfg
+from mjlab.sensor import (
+  BuiltinSensor,
+  RayCastSensor,
+  Sensor,
+  SensorCfg,
+  TerrainHeightSensorCfg,
+)
 from mjlab.sensor.camera_sensor import CameraSensor
 from mjlab.sensor.sensor_context import SensorContext
 from mjlab.terrains.terrain_entity import TerrainEntity, TerrainEntityCfg
@@ -51,6 +57,12 @@ class SceneCfg:
   They do not participate in physics or raycast sensors.
   """
 
+  spawn_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+  """World-space offset applied to every environment origin during reset."""
+
+  spawn_quaternion_wxyz: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+  """World-space orientation applied to root poses during reset."""
+
   extent: float | None = None
   """Override for ``mjModel.stat.extent``. If ``None``, MuJoCo computes
   it automatically."""
@@ -75,6 +87,7 @@ class Scene:
     if self._cfg.extent is not None:
       self._spec.stat.extent = self._cfg.extent
     self._add_terrain()
+    self._retarget_terrain_height_sensors()
     self._add_entities()
     self._add_sensors()
     if self._cfg.spec_fn is not None:
@@ -123,9 +136,19 @@ class Scene:
   def env_origins(self) -> torch.Tensor:
     if self._terrain is not None:
       assert self._terrain.env_origins is not None
-      return self._terrain.env_origins
-    assert self._default_env_origins is not None
-    return self._default_env_origins
+      origins = self._terrain.env_origins
+    else:
+      assert self._default_env_origins is not None
+      origins = self._default_env_origins
+    offset = torch.tensor(
+      self._cfg.spawn_position, device=self._device, dtype=origins.dtype
+    )
+    return origins + offset
+
+  @property
+  def spawn_quaternion_wxyz(self) -> tuple[float, float, float, float]:
+    """World-space orientation prepended to entity root poses during reset."""
+    return self._cfg.spawn_quaternion_wxyz
 
   @property
   def env_spacing(self) -> float:
@@ -292,6 +315,19 @@ class Scene:
       )
     frame = self._spec.worldbody.add_frame()
     self._spec.attach(terrain.spec, prefix="", frame=frame)
+
+  def _retarget_terrain_height_sensors(self) -> None:
+    """Point terrain-height rays at an external terrain's configured geom group."""
+    terrain_cfg = self._cfg.terrain
+    if (
+      terrain_cfg is None
+      or terrain_cfg.terrain_type != "mjcf"
+      or terrain_cfg.mjcf_geom_group is None
+    ):
+      return
+    for sensor_cfg in self._cfg.sensors:
+      if isinstance(sensor_cfg, TerrainHeightSensorCfg):
+        sensor_cfg.include_geom_groups = (terrain_cfg.mjcf_geom_group,)
 
   def _add_sensors(self) -> None:
     for sensor_cfg in self._cfg.sensors:

@@ -13,6 +13,7 @@ import tyro
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
+from mjlab.scene import apply_scene_manifest
 from mjlab.scripts._cli import maybe_print_top_level_help
 from mjlab.tasks.g1_3dgs import (
   G1_3DGS_VIDEO_SENSOR,
@@ -20,6 +21,7 @@ from mjlab.tasks.g1_3dgs import (
 )
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
+from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.os import get_wandb_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
@@ -43,8 +45,18 @@ class PlayConfig:
   """Optional checkpoint name within the W&B run to load (e.g. 'model_4000.pt')."""
   checkpoint_file: str | None = None
   motion_file: str | None = None
+  scene_manifest: str | None = None
+  """Versioned JSON manifest binding the 3DGS and collision scene assets."""
+  scene_spawn_point: str | None = None
+  """Named manifest spawn point; defaults to ``default``."""
   gaussian_splat_file: str | None = None
   """PLY file overriding the task's configured single 3DGS asset."""
+  collision_mjcf_file: str | None = None
+  """Static collision-only MJCF replacing the task's configured terrain."""
+  collision_keep_plane: bool = False
+  """Keep the task's flat plane with external collision geometry for debugging."""
+  collision_visible: bool = False
+  """Show external collision geoms in viewer group 3."""
   num_envs: int | None = None
   device: str | None = None
   video: bool = False
@@ -87,6 +99,84 @@ def _override_gaussian_splat_file(
   print(f"[INFO]: Using Gaussian splat file: {asset_path}")
 
 
+def _override_collision_mjcf_file(
+  env_cfg: ManagerBasedRlEnvCfg,
+  collision_mjcf_file: str,
+  *,
+  keep_plane: bool = False,
+) -> None:
+  """Replace a task's terrain with a static collision-only MJCF scene."""
+  collision_path = Path(collision_mjcf_file).expanduser()
+  if not collision_path.is_file():
+    raise FileNotFoundError(f"Collision MJCF not found: {collision_path}")
+
+  terrain_cfg = env_cfg.scene.terrain
+  if terrain_cfg is None:
+    env_cfg.scene.terrain = TerrainEntityCfg(
+      terrain_type="mjcf",
+      mjcf_path=str(collision_path),
+      mjcf_keep_plane=keep_plane,
+    )
+  else:
+    env_cfg.scene.terrain = replace(
+      terrain_cfg,
+      terrain_type="mjcf",
+      terrain_generator=None,
+      mjcf_path=str(collision_path),
+      mjcf_keep_plane=keep_plane,
+    )
+  print(f"[INFO]: Using collision MJCF: {collision_path}")
+
+
+def _enable_collision_visibility(env_cfg: ManagerBasedRlEnvCfg) -> None:
+  """Enable viewer geom group 3 while preserving every other group."""
+  group_0, group_1, group_2, _, group_4, group_5 = env_cfg.viewer.geom_group
+  env_cfg.viewer.geom_group = (
+    group_0,
+    group_1,
+    group_2,
+    1,
+    group_4,
+    group_5,
+  )
+
+
+def _apply_play_scene_inputs(env_cfg: ManagerBasedRlEnvCfg, cfg: PlayConfig) -> None:
+  """Apply either a scene manifest or the independent asset overrides."""
+  split_options = (
+    cfg.gaussian_splat_file is not None,
+    cfg.collision_mjcf_file is not None,
+    cfg.collision_keep_plane,
+  )
+  if cfg.scene_manifest is not None and any(split_options):
+    raise ValueError(
+      "--scene-manifest cannot be combined with --gaussian-splat-file, "
+      "--collision-mjcf-file, or --collision-keep-plane"
+    )
+  if cfg.scene_spawn_point is not None and cfg.scene_manifest is None:
+    raise ValueError("--scene-spawn-point requires --scene-manifest")
+
+  if cfg.scene_manifest is not None:
+    manifest = apply_scene_manifest(
+      env_cfg.scene,
+      cfg.scene_manifest,
+      spawn_point=cfg.scene_spawn_point,
+    )
+    print(f"[INFO]: Using scene manifest: {manifest.source_path}")
+  else:
+    if cfg.gaussian_splat_file is not None:
+      _override_gaussian_splat_file(env_cfg, cfg.gaussian_splat_file)
+    if cfg.collision_mjcf_file is not None:
+      _override_collision_mjcf_file(
+        env_cfg,
+        cfg.collision_mjcf_file,
+        keep_plane=cfg.collision_keep_plane,
+      )
+
+  if cfg.collision_visible:
+    _enable_collision_visibility(env_cfg)
+
+
 def run_play(task_id: str, cfg: PlayConfig):
   configure_torch_backends()
 
@@ -95,8 +185,7 @@ def run_play(task_id: str, cfg: PlayConfig):
   env_cfg = load_env_cfg(task_id, play=True)
   agent_cfg = load_rl_cfg(task_id)
 
-  if cfg.gaussian_splat_file is not None:
-    _override_gaussian_splat_file(env_cfg, cfg.gaussian_splat_file)
+  _apply_play_scene_inputs(env_cfg, cfg)
 
   DUMMY_MODE = cfg.agent in {"zero", "random"}
   TRAINED_MODE = not DUMMY_MODE

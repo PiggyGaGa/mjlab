@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
+from xml.etree import ElementTree
 
 import mujoco
 import numpy as np
@@ -66,12 +68,26 @@ _DEFAULT_PLANE_MATERIAL = spec_cfg.MaterialCfg(
 class TerrainEntityCfg(EntityCfg):
   """Configuration for terrain as an entity."""
 
-  terrain_type: Literal["generator", "plane"] = "plane"
+  terrain_type: Literal["generator", "plane", "mjcf"] = "plane"
   """Type of terrain to generate. "generator" uses procedural terrain with
-  sub-terrain grid, "plane" creates a flat ground plane."""
+  sub-terrain grid, "plane" creates a flat ground plane, and "mjcf" loads a
+  static collision scene from an MJCF file."""
   terrain_generator: TerrainGeneratorCfg | None = None
   """Configuration for procedural terrain generation. Required when
   terrain_type is "generator"."""
+  mjcf_path: str | None = None
+  """Path to a collision-only MJCF file. Required when terrain_type is
+  "mjcf". Referenced assets must use paths relative to the MJCF directory."""
+  mjcf_keep_plane: bool = False
+  """Add the built-in plane alongside MJCF collision geometry for debugging."""
+  mjcf_geom_group: int | None = 3
+  """Override imported collision geom groups. Group 3 is hidden by the bundled
+  3DGS viewer configuration but can be toggled for collision debugging. Set to
+  ``None`` to preserve groups from the MJCF file."""
+  mjcf_pos: tuple[float, float, float] = (0.0, 0.0, 0.0)
+  """Translation from collision scene coordinates to world coordinates."""
+  mjcf_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+  """Collision scene-to-world rotation in ``(w, x, y, z)`` order."""
   env_spacing: float | None = 2.0
   """Distance between environment origins when using grid layout. Required for
   "plane" terrain or when no sub-terrain origins exist."""
@@ -132,6 +148,8 @@ class TerrainEntity(Entity):
 
   def _build_spec(self) -> None:
     self._spec = mujoco.MjSpec()
+    if self.cfg.terrain_type != "mjcf" and self.cfg.mjcf_path is not None:
+      raise ValueError("mjcf_path is only valid for terrain_type 'mjcf'")
 
     if self.cfg.terrain_type == "generator":
       if self.cfg.terrain_generator is None:
@@ -158,6 +176,11 @@ class TerrainEntity(Entity):
       self._configure_env_origins()
       self._flat_patches: dict[str, torch.Tensor] = {}
       self._flat_patch_radii: dict[str, float] = {}
+    elif self.cfg.terrain_type == "mjcf":
+      self._import_collision_mjcf()
+      self._configure_env_origins()
+      self._flat_patches = {}
+      self._flat_patch_radii = {}
     else:
       raise ValueError(f"Unknown terrain type: {self.cfg.terrain_type}")
 
@@ -252,12 +275,141 @@ class TerrainEntity(Entity):
 
   # Private methods.
 
-  def _import_ground_plane(self, name: str) -> None:
-    self._spec.worldbody.add_body(name=name).add_geom(
+  def _import_ground_plane(self, name: str, *, body_name: str | None = None) -> None:
+    self._spec.worldbody.add_body(name=body_name or name).add_geom(
       name=name,
       type=mujoco.mjtGeom.mjGEOM_PLANE,
       size=(0, 0, 0.01),
     )
+
+  def _import_collision_mjcf(self) -> None:
+    if self.cfg.mjcf_path is None:
+      raise ValueError("mjcf_path must be specified for terrain_type 'mjcf'")
+    if self.cfg.terrain_generator is not None:
+      raise ValueError("terrain_generator cannot be specified for terrain_type 'mjcf'")
+
+    mjcf_path = Path(self.cfg.mjcf_path).expanduser()
+    if not mjcf_path.is_file():
+      raise FileNotFoundError(f"Collision MJCF not found: {mjcf_path}")
+
+    self._validate_mjcf_asset_paths(mjcf_path)
+    try:
+      spec = mujoco.MjSpec.from_file(str(mjcf_path))
+    except ValueError as exc:
+      raise ValueError(f"Failed to load collision MJCF '{mjcf_path}': {exc}") from exc
+
+    if spec.joints:
+      raise ValueError(
+        "Collision MJCF must be static and cannot contain joints or free joints"
+      )
+    if spec.actuators:
+      raise ValueError("Collision MJCF cannot contain actuators")
+    if spec.sensors:
+      raise ValueError("Collision MJCF cannot contain sensors")
+    if any(body.mocap for body in spec.bodies):
+      raise ValueError("Collision MJCF cannot contain mocap bodies")
+
+    supported_geom_types = {
+      mujoco.mjtGeom.mjGEOM_PLANE,
+      mujoco.mjtGeom.mjGEOM_HFIELD,
+      mujoco.mjtGeom.mjGEOM_SPHERE,
+      mujoco.mjtGeom.mjGEOM_CAPSULE,
+      mujoco.mjtGeom.mjGEOM_ELLIPSOID,
+      mujoco.mjtGeom.mjGEOM_CYLINDER,
+      mujoco.mjtGeom.mjGEOM_BOX,
+      mujoco.mjtGeom.mjGEOM_MESH,
+    }
+    unsupported_geoms = [
+      geom.name or "<unnamed>"
+      for geom in spec.geoms
+      if geom.type not in supported_geom_types
+    ]
+    if unsupported_geoms:
+      raise ValueError(
+        "Collision MJCF contains unsupported geom types: "
+        + ", ".join(unsupported_geoms)
+      )
+    if not any(geom.contype != 0 or geom.conaffinity != 0 for geom in spec.geoms):
+      raise ValueError("Collision MJCF has no collision-enabled geoms")
+
+    if self.cfg.mjcf_geom_group is not None:
+      if not 0 <= self.cfg.mjcf_geom_group <= 5:
+        raise ValueError("mjcf_geom_group must be between 0 and 5")
+      for geom in spec.geoms:
+        geom.group = self.cfg.mjcf_geom_group
+
+    transform_pos = np.asarray(self.cfg.mjcf_pos, dtype=np.float64)
+    transform_quat = np.asarray(self.cfg.mjcf_quat, dtype=np.float64)
+    if transform_pos.shape != (3,) or not np.all(np.isfinite(transform_pos)):
+      raise ValueError("mjcf_pos must contain three finite values")
+    if transform_quat.shape != (4,) or not np.all(np.isfinite(transform_quat)):
+      raise ValueError("mjcf_quat must contain four finite values")
+    quat_norm = float(np.linalg.norm(transform_quat))
+    if not np.isclose(quat_norm, 1.0, rtol=1.0e-6, atol=1.0e-6):
+      raise ValueError("mjcf_quat must be a unit quaternion in (w, x, y, z) order")
+
+    # Use one fixed root for every imported scene. This supports legal MJCF geoms
+    # directly under <worldbody> and applies one transform to all collision assets.
+    wrapper_spec = mujoco.MjSpec()
+    wrapper_spec.modelfiledir = spec.modelfiledir
+    # Keep the conventional terrain body name so existing contact sensors that
+    # filter against body="terrain" continue to work with external MJCF input.
+    # A source body with that name is safe to rename because dynamic elements and
+    # sensors have already been rejected above.
+    for body in spec.bodies:
+      if body.name == "terrain":
+        body.name = "collision_source_terrain"
+    root_body = wrapper_spec.worldbody.add_body(
+      name="terrain",
+      pos=self.cfg.mjcf_pos,
+      quat=self.cfg.mjcf_quat,
+    )
+    wrapper_spec.attach(child=spec, prefix="", frame=root_body.add_frame())
+    spec = wrapper_spec
+
+    if self.cfg.mjcf_keep_plane:
+      self._spec = spec
+      self._import_ground_plane("terrain", body_name="fallback_plane")
+
+    try:
+      spec.compile()
+    except ValueError as exc:
+      raise ValueError(
+        f"Collision MJCF '{mjcf_path}' failed to compile: {exc}"
+      ) from exc
+
+    self._spec = spec
+
+  @staticmethod
+  def _validate_mjcf_asset_paths(mjcf_path: Path) -> None:
+    try:
+      root = ElementTree.parse(mjcf_path).getroot()
+    except ElementTree.ParseError as exc:
+      raise ValueError(f"Invalid collision MJCF XML '{mjcf_path}': {exc}") from exc
+
+    path_attributes: list[tuple[str, str]] = []
+    for element in root.iter():
+      if element.tag == "include":
+        raise ValueError("Collision MJCF includes are not supported")
+      if file_path := element.attrib.get("file"):
+        path_attributes.append((f"<{element.tag}> file", file_path))
+      if element.tag == "compiler":
+        for attribute in ("assetdir", "meshdir", "texturedir"):
+          if directory := element.attrib.get(attribute):
+            path_attributes.append((f"<compiler> {attribute}", directory))
+
+    for label, raw_path in path_attributes:
+      posix_path = PurePosixPath(raw_path)
+      windows_path = PureWindowsPath(raw_path)
+      if (
+        posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or ".." in posix_path.parts
+        or ".." in windows_path.parts
+      ):
+        raise ValueError(
+          f"Collision MJCF {label} must stay relative to its directory: {raw_path}"
+        )
 
   def _add_env_origin_sites(self) -> None:
     if self.env_origins is None:

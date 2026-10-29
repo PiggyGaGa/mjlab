@@ -8,18 +8,25 @@ from mjlab.scene import GaussianSplatAssetCfg, GaussianSplatSceneCfg
 from mjlab.sensor import CameraSensorCfg, TerrainHeightSensorCfg
 
 G1_3DGS_VIDEO_SENSOR = "g1_3dgs_video"
+G1_3DGS_DEPTH_SENSOR = "g1_3dgs_depth"
 _DEFAULT_G1_3DGS_ASSET = str(
   Path(__file__).resolve().parents[1]
   / "asset_zoo/3dgs/room1/point_cloud_2_transform.ply"
 )
 
 
-def apply_g1_3dgs_play_cfg(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
-  """Add native Viser 3DGS visualization without enabling MJWarp rendering."""
+def apply_g1_3dgs_scene_cfg(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
+  """Attach the shared Gaussian asset for play or depth-observation tasks."""
   asset_path = os.environ.get("MJLAB_G1_3DGS_ASSET", _DEFAULT_G1_3DGS_ASSET)
   cfg.scene.gaussian_splats = GaussianSplatSceneCfg(
     assets=(GaussianSplatAssetCfg(path=asset_path),)
   )
+  return cfg
+
+
+def apply_g1_3dgs_play_cfg(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
+  """Add native Viser 3DGS visualization without enabling MJWarp rendering."""
+  apply_g1_3dgs_scene_cfg(cfg)
 
   # Group 0 contains the physical plane. Keep it active for contacts while hiding
   # it from Viser so the Gaussian scene remains visible.

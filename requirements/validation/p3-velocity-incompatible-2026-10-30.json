@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-30T00:04:52.580805+08:00",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "mujoco": "3.16.0+3dgs",
+  "torch": "2.14.0+cu130",
+  "checkpoint": "/home/yzt/humanoid/Unitree/unitree_rl_mjlab/logs/rsl_rl/g1_velocity/2026-08-25_12-42-10/model_10000.pt",
+  "method": "on/off viewer only; same loaded room1 scene; two trials each",
+  "limitations": [
+    "No rendered-frame capture API; no image/occlusion equivalence claim",
+    "GPU memory is device-wide and is not a process allocation benchmark",
+    "Viewer submissions are not display refresh FPS",
+    "Viewer setup time excludes environment initialization and checkpoint load",
+    "Sequential resets are not guaranteed identical policy trajectories"
+  ],
+  "samples": [],
+  "status": "failed",
+  "error": "RuntimeError('Error(s) in loading state_dict for MLPModel:\\n\\tsize mismatch for obs_normalizer._mean: copying a param with shape torch.Size([1, 98]) from checkpoint, the shape in current model is torch.Size([1, 99]).\\n\\tsize mismatch for obs_normalizer._var: copying a param with shape torch.Size([1, 98]) from checkpoint, the shape in current model is torch.Size([1, 99]).\\n\\tsize mismatch for obs_normalizer._std: copying a param with shape torch.Size([1, 98]) from checkpoint, the shape in current model is torch.Size([1, 99]).\\n\\tsize mismatch for mlp.0.weight: copying a param with shape torch.Size([512, 98]) from checkpoint, the shape in current model is torch.Size([512, 99]).')"
+}

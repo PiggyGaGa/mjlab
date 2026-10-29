@@ -133,6 +133,10 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.uv.sources]
+mujoco = [
+  { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'" },
+  { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.13'" },
+]
 warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
 torch = [
   { index = "pytorch-cu130", extra = "cu130", marker = "sys_platform != 'darwin'" },

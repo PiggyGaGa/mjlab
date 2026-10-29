@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-30T00:09:54.233079+08:00",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "mujoco": "3.16.0+3dgs",
+  "torch": "2.14.0+cu130",
+  "checkpoint": "/home/yzt/humanoid/Unitree/unitree_rl_mjlab/logs/rsl_rl/g1_velocity/2026-08-25_12-42-10/model_10000.pt",
+  "legacy_phase_observations": true,
+  "method": "on/off viewer only; same loaded room1 scene; two trials each",
+  "limitations": [
+    "No rendered-frame capture API; no image/occlusion equivalence claim",
+    "GPU memory is device-wide and is not a process allocation benchmark",
+    "Viewer submissions are not display refresh FPS",
+    "Viewer setup time excludes environment initialization and checkpoint load",
+    "Sequential resets are not guaranteed identical policy trajectories"
+  ],
+  "samples": [
+    {
+      "gaussians_enabled": false,
+      "viewer_setup_seconds": 0.36826315200050885,
+      "controls": {
+        "callback_pause_single_step_reset_resume": "passed",
+        "camera_parameter_roundtrip": "passed",
+        "physical_keyboard_and_mouse": "manual verification required"
+      },
+      "wall_seconds": 10.010265083999911,
+      "policy_steps": 499,
+      "actual_rt": 0.9969765951504835,
+      "viewer_submissions_per_second": 59.93847265433768,
+      "device_wide_gpu_memory": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 1751 MiB",
+      "window_close_and_ply_cleanup": "passed"
+    },
+    {
+      "gaussians_enabled": true,
+      "viewer_setup_seconds": 0.9043389790003857,
+      "controls": {
+        "callback_pause_single_step_reset_resume": "passed",
+        "camera_parameter_roundtrip": "passed",
+        "physical_keyboard_and_mouse": "manual verification required"
+      },
+      "wall_seconds": 10.021642873000019,
+      "policy_steps": 442,
+      "actual_rt": 0.8820909018636492,
+      "viewer_submissions_per_second": 30.533915833741705,
+      "device_wide_gpu_memory": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 1864 MiB",
+      "collision_visibility": {
+        "cpu_replay_steps": 100,
+        "contact_samples": 680,
+        "qpos_qvel_contact_pairs_and_distances": "identical",
+        "scope": "CPU MuJoCo replay; excludes full MJWarp policy trajectory replay"
+      },
+      "window_close_and_ply_cleanup": "passed"
+    },
+    {
+      "gaussians_enabled": false,
+      "viewer_setup_seconds": 0.48609937200126296,
+      "controls": {
+        "callback_pause_single_step_reset_resume": "passed",
+        "camera_parameter_roundtrip": "passed",
+        "physical_keyboard_and_mouse": "manual verification required"
+      },
+      "wall_seconds": 10.000728623001123,
+      "policy_steps": 499,
+      "actual_rt": 0.9979272887223989,
+      "viewer_submissions_per_second": 59.99562858050494,
+      "device_wide_gpu_memory": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 1733 MiB",
+      "window_close_and_ply_cleanup": "passed"
+    },
+    {
+      "gaussians_enabled": true,
+      "viewer_setup_seconds": 0.9325367170004029,
+      "controls": {
+        "callback_pause_single_step_reset_resume": "passed",
+        "camera_parameter_roundtrip": "passed",
+        "physical_keyboard_and_mouse": "manual verification required"
+      },
+      "wall_seconds": 10.011900270999831,
+      "policy_steps": 366,
+      "actual_rt": 0.731129935563071,
+      "viewer_submissions_per_second": 28.765767956579843,
+      "device_wide_gpu_memory": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 1839 MiB",
+      "collision_visibility": {
+        "cpu_replay_steps": 100,
+        "contact_samples": 533,
+        "qpos_qvel_contact_pairs_and_distances": "identical",
+        "scope": "CPU MuJoCo replay; excludes full MJWarp policy trajectory replay"
+      },
+      "window_close_and_ply_cleanup": "passed"
+    }
+  ],
+  "gpu_before_windows": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 1012 MiB",
+  "gpu_after_windows": "NVIDIA GeForce RTX 4070 Laptop GPU, 580.159.03, 999 MiB",
+  "status": "passed"
+}

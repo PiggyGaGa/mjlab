@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-10-25
+最后更新：2026-10-30
 
 ## 0. 项目总览
 
@@ -11,7 +11,7 @@
 | P0 | 需求与调研 | 第一轮完成 | 持续补充论文材料 |
 | P1 | 3DGS 资产导入 | 基础完成 | 资源上限与导入优化 |
 | P2 | MJWarp 原生渲染 | 基础完成 | 训练性能与深度验证 |
-| P3 | Play 前端（Viser/外部 viewer） | 基础完成 | 外部 MuJoCo viewer 联调验收 |
+| P3 | Play 前端（Viser/外部 viewer） | **完成（按当前范围收口）** | 新版 wheel 后续发布；增强验证转为后续加固 |
 | P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 后续由 P8 生成碰撞资产 |
 | P5 | 统一场景资产 | **完成** | 进入 P6 视觉训练 |
 | P6 | YAM Vision → G1 视觉训练适配 | **进行中** | depth runtime smoke test |
@@ -32,7 +32,7 @@ mjlab 3DGS
 ├── 视觉基础
 │   ├── P1 PLY 导入、规范化、多 world              [基础完成]
 │   ├── P2 MuJoCo Warp RGB/depth                   [基础完成]
-│   └── P3 Play 前端：Viser、视频、外部 viewer     [基础完成]
+│   └── P3 Play 前端：Viser、视频、外部 viewer     [完成，按当前范围收口]
 ├── 物理场景
 │   ├── P4 外部 collision-only MJCF                [MVP 完成，阶段收口]
 │   ├── P5 PLY/MJCF manifest 与统一 transform      [完成]
@@ -108,6 +108,10 @@ P4 外部碰撞输入
   不使用相机截图作为背景。
 - 已提供 G1 velocity 和 tracking 的 3DGS Play 配置、预训练 tracking demo、
   PLY 命令行覆盖、多机器人显示和按需视频录制。
+- 已通过自定义 MuJoCo 原生 viewer 的 room1 冒烟测试：加载 799,083 个
+  Gaussian，预训练 G1 tracking 策略连续运行 200 步，关节位置数值有限，
+  测试完成后窗口正常关闭。用户已确认 passive UI 修复，并决定 P3 按当前
+  范围收口；新版 wheel 后续发布，增强验证不再阻塞 P3。
 - 已支持通过 `TerrainEntityCfg(terrain_type="mjcf")` 加载静态
   collision-only MJCF；训练、Play 和 demo 均可用外部碰撞替换 plane。
 - 已支持 primitive、多个凸 mesh、heightfield、相对资产路径、静态性
@@ -200,6 +204,14 @@ P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强�
 
 ### D. P3 Play 前端（Viser 与外部 viewer）
 
+**完成（2026-10-30，按用户确认的当前范围收口）。** 已有 Viser/native
+核心链路、tracking/velocity 联调、接口契约、自动控制测试及性能初测证据，
+用户确认 passive UI 已修复。最终 `make check` 和 13 项定向回归已通过。
+用户决定后续再发布更新版本；新版 wheel 发布/安装，以及下列尚未勾选的
+人工画面对照、物理键鼠、完整 MJWarp 接触重放、多场景、长期资源和正式
+性能验证均保留为后续发布或加固任务，不再作为 P3 完成的阻塞条件。
+未勾选项不代表已执行或通过，已有验证边界继续保留。
+
 #### D1. Viser 原生 3DGS Play
 
 - [x] 使用 Viser `add_gaussian_splats` 原生接口显示，不再传输低分辨率
@@ -227,18 +239,78 @@ P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强�
 本仓库不重复实现外部前端，只维护稳定场景/状态接口并记录跨仓库测试
 步骤和结果。
 
-- [ ] 定义供外部 MuJoCo viewer/simulate 仓库使用的稳定场景与状态接口。
-- [ ] 记录外部仓库地址、测试分支/commit、依赖版本和启动命令。
-- [ ] 使用 room1 `manifest.json` 同时加载 PLY、collision MJCF 和
+- [x] 定义供外部 MuJoCo viewer/simulate 仓库使用的版本 1 场景与状态接口，
+  见 `mjlab-3dgs-native-interface.md`；覆盖规范化数组、PLY 编码、状态同步、
+  资产选择和生命周期。跨版本兼容性及不同碰撞模型切换不在承诺范围内。
+- [x] 接入 `mujoco.gaussian.GaussianAssets` 与 passive viewer 的
+  `gaussian_ply`/`load_gaussian_ply` 接口，复用现有机器人状态同步；
+  无 3DGS、资产组切换和缺失定制 wheel 的错误提示已有单元测试。
+- [x] 记录外部仓库地址、测试分支/commit、依赖版本和启动命令，见下文。
+- [x] 使用 room1 `manifest.json` 同时加载 PLY、collision MJCF 和
   `default` spawn point。
-- [ ] 加载本地 G1 velocity checkpoint，确认机器人状态和策略运动连续
-  同步到 viewer/simulate。
+- [x] 加载标准 demo 的 G1 tracking checkpoint 和 motion，原生 renderer
+  就绪后完成 200 步策略推理与仿真，检查同步后的关节位置为有限值。
+- [x] 加载本地 G1 velocity `model_10000.pt`，通过显式旧版 phase observation
+  适配完成真实窗口策略运行；显示帧上的 qpos/qvel 与 MJWarp 状态逐项一致。
+  直接使用当前标准配置加载失败（旧 actor 98 维，当前 99 维），未修改
+  checkpoint 或生产任务默认配置，不据此声称完整训练环境兼容或零跌倒。
 - [ ] 确认 3DGS、机器人 mesh 和 collision proxy 的坐标、尺度、朝向及
   遮挡关系与 Viser 结果一致。
+- [x] 使用非对称位置、各向异性 scale 和非单位旋转验证 native PLY 往返的
+  position、covariance、DC RGBA 与 Viser 的规范化输入一致；不替代画面对照。
 - [ ] 验证 collision proxy 的显示/隐藏不会改变真实物理接触。
+- [x] 使用相同 CPU 初始状态/控制，比较 group 3 隐藏/显示下的 100 步
+  接触重放：qpos/qvel、接触对和接触距离完全一致；两轮分别包含
+  680 和 533 个接触样本。完整 MJWarp 策略轨迹对照仍待补。
 - [ ] 验证交互相机、暂停/继续、reset、退出和资源释放。
+- [x] 四个真实窗口通过 callback/action queue 的暂停、单步、reset、继续、
+  相机参数往返、关闭和临时 PLY 清理；物理键盘/鼠标和长期资源测试待补。
+- [x] 用户人工确认原生交互窗口中 F8 可切换 3DGS 显示，但左侧
+  `3DGS > Show / Hide` 按钮置灰，不能点击；该结果不代表 UI 完整验收通过。
+- [x] 定位外部 MuJoCo `simulate/simulate.cc` 的 `Make3DgsSection`：
+  radio 控件使用类别 `5`，`UiPredicate` 将其限制为非 passive 模式；
+  mjlab 使用 `launch_passive()`。F8 直接调用 `mjgs::ToggleVisible()`，
+  不受该条件限制。
+- [x] 用户于 2026-10-30 确认外部 MuJoCo 的 passive UI 问题已修复。
+  本轮未独立核对具体实现、修复 commit 或 wheel 内容。
+- [ ] 重新构建并发布修复后的 wheel，更新 mjlab 的 Release URL 与
+  `uv.lock`，记录版本及 hash；当前未确认已安装 wheel 含此修复。
+- [ ] 用 `uv run tests/run_g1_3dgs_native_demo.py --interactive` 人工验证
+  Show/Hide 可点击、与 F8 状态一致，且仅改变 3DGS 可见性。
 - [ ] 对比无 3DGS 与启用 3DGS 的 Actual RT、帧率、显存和加载时间，
   保存测试日期、硬件、命令和结果。
+- [x] 完成 viewer off/on/off/on 四轮各 10 秒初测，记录 Actual RT、提交
+  频率、设备总显存与窗口加载时间。正式显示 FPS、进程显存和完整场景
+  初始化耗时尚未测量，不关闭上一项。
+
+2026-10-30 六项验收的详细结果见
+`validation/p3-acceptance-2026-10-30.md`，原始 JSON 和直接加载失败记录
+一并保存在 `validation/`。自动工具为 `tests/run_g1_3dgs_acceptance.py`。
+
+当前联调记录（2026-10-29）：
+
+- 外部仓库：`git@github.com:PiggyGaGa/mujoco.git`；本地路径
+  `/home/yzt/Documents/3DGS/mujoco`，分支 `feature/3dgs`，当前 HEAD
+  `0a2f9118f4b9ad695a6c55328d3549446a3e6e7a`，记录时工作树干净。
+  此为当前源码版本记录，尚未独立核对 wheel 构建来源与该 commit 的对应关系。
+- 已安装包：`mujoco==3.16.0+3dgs`，CPython 3.13；GPU 为 NVIDIA
+  GeForce RTX 4070 Laptop GPU（8 GiB），OpenGL 4.6，驱动 580.159.03。
+- 自动冒烟命令：
+  `uv run --no-sync tests/run_g1_3dgs_native_demo.py --steps 200`。
+  实测 renderer 状态为 `ready`，加载 799,083 个 Gaussian，完成 200 步，
+  进程退出码为 0。此测试不证明遮挡正确、交互控制完整或接触指标合格。
+- 当前交互入口：`uv run tests/run_g1_3dgs_native_demo.py --interactive`；
+  添加 `--collision-visible` 可显示碰撞代理，交互模式尚未专项验收。
+- 初次验证时使用 `--no-sync` 保留手动安装的定制 wheel。2026-10-30
+  已将 Linux x86_64 Python 3.12/3.13 的 uv source 改为远程
+  `https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0` 中的对应 wheel，
+  更新 `uv.lock` 并记录 SHA-256；当前无需 `--no-sync` 或相邻源码目录。
+  这些 wheel 要求 glibc >= 2.35；其他平台/Python 版本仍使用官方 MuJoCo，
+  不提供此定制原生 3DGS viewer。
+- [x] 通过 GitHub Release wheel 分发定制 MuJoCo，并接入 uv 按平台和
+  Python 版本选择依赖；README、脚本帮助、RST 指南和 changelog 已同步。
+- P3 已按用户确认的当前范围完成；D1 增强项和 D2 未勾选项作为后续
+  发布/加固任务保留，不阻塞当前阶段收口。
 
 ### E. G1 任务、CLI 与 checkpoint Play
 
@@ -286,6 +358,33 @@ P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强�
 
 ### H. 当前验证证据
 
+- [x] 2026-10-30 用户明确要求 P3 标记完成，并决定后续发布更新版本。
+  依据已有最终 `make check`、13 项定向测试、真实窗口联调及用户确认的
+  passive UI 修复，按当前范围收口；未执行的增强验证仍保留原状态。
+- [x] 2026-10-30 用户反馈 native demo 交互模式下 F8 可用、左侧 3DGS
+  Show/Hide 按钮置灰。源码检查确认是类别 `5` 禁止 passive 模式；
+  随后用户确认 passive UI 已修复。修复 wheel 的发布、安装和按钮/F8
+  联动验证尚未确认。
+- [x] 2026-10-30 使用用户指定 run 的 `model_10000.pt`，在显式
+  `--legacy-phase-observations` 下完成四轮真实原生窗口验收；命令、硬件、
+  性能和兼容性限制见 `validation/p3-acceptance-2026-10-30.md`。
+- [x] 2026-10-30 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest tests/test_native_gaussian_contract.py tests/test_native_viewer_gaussians.py tests/test_native_viewer_actions.py tests/test_viser_update_policy.py -q`：
+  `13 passed`；最终 `make check` 通过，Ruff、ty、Pyright 均无错误。
+- [x] 2026-10-30 使用 Release wheel 和正常依赖同步运行
+  `uv run --locked tests/run_g1_3dgs_native_demo.py --steps 200`，
+  安装版本为 `3.16.0+3dgs`，renderer 就绪，200 步通过，退出码为 0。
+  `uv lock --offline` 和 `uv run --offline ruff check tests/run_g1_3dgs_native_demo.py`
+  均通过；`--locked` 仅要求锁文件保持最新，未跳过依赖同步。
+- [x] 2026-10-29 原生 MuJoCo viewer 的 room1 G1 tracking 冒烟通过：
+  `uv run --no-sync tests/run_g1_3dgs_native_demo.py --steps 200`。
+  实际打开原生窗口，renderer 就绪并完成 200 步，正常退出。
+- [x] 2026-10-29 定向回归：
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync pytest tests/test_native_viewer_gaussians.py tests/test_g1_3dgs_vision_config.py -q`，
+  `7 passed`。禁用自动加载是为了避免系统 ROS pytest 插件缺少 `lark`
+  导致收集失败。
+- [x] 2026-10-29 新增脚本的 Ruff format/check、ty 和 Pyright 检查通过；
+  均使用 `uv run --no-sync`。本轮未运行全仓 `make check` 或 `make test`，
+  不作为 P3 整体关闭的证据。
 - [x] 用户已人工确认真实 PLY 能在 Viser 中原生显示。
 - [x] 用户已人工确认移除普通 Play 的 MJWarp camera 后卡顿改善。
 - [x] 用户测得同一机器上稳态 Actual RT 约为：无 3DGS `0.6`，Viser 3DGS
@@ -663,6 +762,33 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 
 ## 14. 更新记录
 
+- 2026-10-30：补全 README 中原生验收脚本的用法，增加旧 velocity 策略
+  示例、采样时长与 JSON 输出、交互前端对照命令，以及自动验证边界。
+- 2026-10-30：按用户明确决定将 P3 标记为完成，当前范围阶段收口。
+  新版 wheel 由用户后续发布；人工对照、物理键鼠、完整 MJWarp 接触
+  重放、长期资源、多场景和正式性能验证转为后续发布/加固任务。
+  保留历史验收记录及未完成复选框，不将范围调整记为新增测试通过。
+- 2026-10-30：用户确认外部 MuJoCo passive UI 问题已修复，将修复项
+  标记完成；保留修复 wheel 发布/安装及 Show/Hide 与 F8 联动验收待办，
+  尚未记录具体修复 commit 和包版本。
+- 2026-10-30：记录 P3 人工交互发现的原生 3DGS Show/Hide 按钮置灰问题，
+  确认其 UI 类别限制与 passive viewer 不兼容，F8 路径不受限制。
+  新增外部控件修复、wheel 发布与依赖更新、按钮/F8 联动验收待办；
+  不将已有程序回调测试当作完整 UI 验收。
+- 2026-10-30：推进 P3 六项验收，新增真实窗口验收/性能脚本、native PLY
+  几何往返测试和版本 1 接口契约。发现用户旧 velocity checkpoint 的
+  98/99 维 observation 不兼容，记录直接加载失败并提供显式 phase 适配。
+  四轮窗口自动控制、状态同步、清理及 CPU 碰撞显示接触重放通过；性能
+  初测和原始 JSON 已保存。定向测试 `13 passed`、`make check` 通过。
+  人工遮挡/交互、完整 MJWarp 重放和正式性能指标仍未完成，P3 不整体关闭。
+- 2026-10-30：将 MuJoCo 本地 wheel 路径替换为远程 v1.0 Release URL，
+  支持 Linux x86_64 Python 3.12/3.13，更新 uv 锁文件及文档，移除当前
+  启动命令对 `--no-sync` 和相邻 MuJoCo 源码目录的依赖。
+- 2026-10-29：新增原生 MuJoCo 3DGS G1 room1 有限步数冒烟脚本和交互
+  入口，实际完成 renderer 加载与 200 步 tracking 策略仿真；定向回归
+  `7 passed`，新增脚本格式、lint 和类型检查通过。更新 P3 为核心功能
+  完成、原生 viewer 冒烟通过，补录外部仓库版本、硬件和命令；保留
+  velocity checkpoint、Viser 对照、交互控制、接触不变性和性能验收。
 - 2026-10-25：启动 P6，并明确复用 YAM Vision 而不是重新建设视觉训练
   框架。新增 G1 3DGS depth 训练任务、前下视 `64×48` CameraSensor、
   标准化 camera observation group、Spatial-Softmax CNN runner、静态配置

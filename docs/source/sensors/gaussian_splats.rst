@@ -3,6 +3,17 @@
 3D Gaussian Splatting
 =====================
 
+.. note::
+
+   On Linux x86_64 with Python 3.12 or 3.13, the repository's uv configuration
+   downloads the custom MuJoCo 3DGS wheel from
+   `the fork's v1.0 Release <https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0>`_.
+   The wheels require glibc 2.35 or newer. Run
+   ``uv run tests/run_g1_3dgs_native_demo.py --interactive`` for native playback;
+   neither a neighboring MuJoCo checkout nor ``--no-sync`` is required.
+   Other platforms and Python versions use official MuJoCo without the custom
+   native 3DGS viewer.
+
 mjlab can add static 3D Gaussian Splatting (3DGS) assets to interactive Viser
 playback and RGB or depth camera observations. Viser uses its native splat
 renderer for interactive playback. Camera observations and video recording use
@@ -14,6 +25,22 @@ detection, or ``RayCastSensor`` queries. A training environment that needs
 physical interaction must provide separate MuJoCo collision geometry aligned
 with the splat asset.
 
+Native viewer acceptance
+------------------------
+
+Run ``uv run tests/run_g1_3dgs_acceptance.py --checkpoint /path/to/model.pt``
+to exercise native controls and repeated window cleanup, compare CPU contacts
+with collision proxies hidden/shown, and record a JSON runtime report.
+The default output is ``/tmp/p3-acceptance.json``. The August 2026 G1 velocity
+checkpoint uses a different actor observation layout and requires the explicit
+``--legacy-phase-observations`` adapter; this does not change production tasks.
+Add ``--interactive --viewer native`` or ``--interactive --viewer viser``
+for manual camera and occlusion comparisons with that adapter.
+
+The automated camera check changes parameters through the viewer API; physical
+keyboard and mouse operation still needs manual verification. CPU contact replay
+does not establish full MJWarp policy trajectory equivalence. Reported submission
+frequency is not display FPS, and GPU memory measurements include other processes.
 
 Supported PLY format
 --------------------

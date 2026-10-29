@@ -8,6 +8,19 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added native 3DGS velocity acceptance checks for viewer controls, CPU contact
+  replay under collision visibility changes, repeated window cleanup, and runtime
+  comparisons. A test-only legacy phase observation adapter supports the August
+  G1 velocity checkpoint; standard tasks remain unchanged.
+
+- Added a finite-step native MuJoCo 3DGS smoke script for the pretrained G1
+  room1 demo, checking renderer readiness and finite robot state, with an
+  interactive playback option.
+
+- Native playback can render normalized 3DGS assets using the custom MuJoCo
+  3DGS wheel, including per-world asset switching. Existing state synchronization
+  and the scene's collision model remain in use.
+
 - Added a versioned JSON scene manifest that binds a 3DGS PLY and collision MJCF,
   verifies SHA-256 fingerprints and bundle-local paths, and applies one shared
   world transform. ``train``, ``play``, and ``demo`` accept ``--scene-manifest``;
@@ -52,6 +65,10 @@ Added
 
 Changed
 ^^^^^^^
+
+- Linux x86_64 Python 3.12/3.13 uv environments now use the custom MuJoCo
+  3DGS wheels from the fork's v1.0 GitHub Release instead of a local wheel path.
+  Native 3DGS playback no longer requires ``uv run --no-sync``.
 
 - Heightfield terrains now lay hfield rows along y and columns along x, as MuJoCo
   expects. Non-square sub-terrains are no longer stretched with flat patches off the

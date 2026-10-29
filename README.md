@@ -87,6 +87,65 @@ collision floor and six fixed pseudo-random pillars:
 uv run tests/run_g1_3dgs_collision_demo.py
 ```
 
+With the custom MuJoCo 3DGS wheel installed, test the native desktop viewer:
+
+```bash
+uv run tests/run_g1_3dgs_native_demo.py --steps 200
+uv run tests/run_g1_3dgs_native_demo.py --interactive
+```
+
+The smoke test waits for the Gaussian renderer, runs the pretrained policy for
+the requested steps, checks finite joint positions, and closes the window.
+Add `--collision-visible` to display the collision proxy. On Linux x86_64 with
+Python 3.12 or 3.13, uv downloads the custom wheel from the MuJoCo fork's
+[v1.0 Release](https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0).
+No adjacent MuJoCo checkout or `--no-sync` is needed. These wheels require glibc
+2.35 or newer; other platforms and Python versions use the official MuJoCo package
+and do not provide this custom native 3DGS viewer.
+
+To check native viewer controls, collision visibility, window cleanup, and
+runtime performance with a velocity checkpoint:
+
+```bash
+uv run tests/run_g1_3dgs_acceptance.py --checkpoint /path/to/model.pt
+```
+
+The script loads the room1 manifest and opens four native windows in sequence
+with 3DGS off/on/off/on. Each window warms up for 10 policy steps, then measures
+10 seconds by default. It checks callback-driven pause, single-step, reset and
+resume, camera parameters, robot state synchronization, CPU contact replay with
+collision proxies hidden/shown, and window/temporary PLY cleanup.
+
+The August 2026 velocity run with 98 actor inputs requires the explicit
+`--legacy-phase-observations` adapter. For that checkpoint, run:
+
+```bash
+uv run tests/run_g1_3dgs_acceptance.py \
+  --checkpoint /path/to/model_10000.pt \
+  --legacy-phase-observations \
+  --seconds 10 \
+  --output /tmp/p3-acceptance.json
+```
+
+The JSON report defaults to `/tmp/p3-acceptance.json` and records Actual RT,
+viewer setup time, submission frequency, device-wide GPU memory, and check
+results. Submission frequency is not display FPS, and CPU contact replay does
+not establish full MJWarp policy trajectory equivalence. Physical keyboard/mouse
+operation and visual occlusion still need manual verification.
+
+For an interactive comparison using the same legacy checkpoint:
+
+```bash
+uv run tests/run_g1_3dgs_acceptance.py \
+  --checkpoint /path/to/model_10000.pt \
+  --legacy-phase-observations --interactive --viewer native --collision-visible
+```
+
+Replace `--viewer native` with `--viewer viser` to compare the browser frontend.
+Interactive mode skips the four-window benchmark; closing it records the session
+ending, not a passed manual acceptance check. See the
+[interface contract and validation limits](requirements/mjlab-3dgs-native-interface.md).
+
 To play a locally trained G1 velocity policy in the same manifest scene:
 
 ```bash

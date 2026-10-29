@@ -41,11 +41,12 @@ in one direction only, so the two sources never overwrite each other.
 
 from __future__ import annotations
 
+import importlib
 import math
 from collections import deque
 from dataclasses import dataclass
 from threading import Lock
-from typing import TYPE_CHECKING, Callable, Optional, Protocol
+from typing import TYPE_CHECKING, Callable, Optional, Protocol, cast
 
 import mujoco
 import mujoco.viewer
@@ -118,6 +119,15 @@ class _SimProtocol(Protocol):
   expanded_fields: set[str]
 
 
+class _GaussianAssetsProtocol(Protocol):
+  def path_for_world(self, env_idx: int) -> str: ...
+  def close(self) -> None: ...
+
+
+class _GaussianViewerProtocol(Protocol):
+  def load_gaussian_ply(self, path: str) -> None: ...
+
+
 class NativeMujocoViewer(BaseViewer):
   def __init__(
     self,
@@ -154,6 +164,38 @@ class NativeMujocoViewer(BaseViewer):
 
     self.env_idx = self.cfg.env_idx
     self._mj_lock = Lock()
+    self._gaussian_assets: _GaussianAssetsProtocol | None = None
+    self._gaussian_asset_id: int | None = None
+
+  def _prepare_gaussian_ply(self) -> str | None:
+    data = self.env.unwrapped.scene.gaussian_splat_data
+    if data is None:
+      return None
+    if self._gaussian_assets is None:
+      try:
+        bridge = importlib.import_module("mujoco.gaussian")
+      except ModuleNotFoundError as exc:
+        raise RuntimeError(
+          "Native 3DGS playback requires the custom MuJoCo 3DGS wheel. "
+          "Install it or select --viewer viser."
+        ) from exc
+      self._gaussian_assets = bridge.GaussianAssets(data)
+    assert self._gaussian_assets is not None
+    path = self._gaussian_assets.path_for_world(self.env_idx)
+    self._gaussian_asset_id = int(data.group_id[self.env_idx])
+    return path
+
+  def _sync_gaussian_asset(self) -> None:
+    if self._gaussian_assets is None or self.viewer is None:
+      return
+    data = self.env.unwrapped.scene.gaussian_splat_data
+    asset_id = int(data.group_id[self.env_idx])
+    if asset_id != self._gaussian_asset_id:
+      path = self._prepare_gaussian_ply()
+      assert path is not None
+      # This custom-wheel API validates on Python's thread and queues GL work.
+      load = cast(_GaussianViewerProtocol, self.viewer).load_gaussian_ply
+      load(path)
 
   def setup(self) -> None:
     """Setup MuJoCo viewer resources."""
@@ -181,12 +223,16 @@ class NativeMujocoViewer(BaseViewer):
 
     assert self.mjm is not None
     assert self.mjd is not None
-    self.viewer = mujoco.viewer.launch_passive(
+    gaussian_ply = self._prepare_gaussian_ply()
+    gaussian_options = {"gaussian_ply": gaussian_ply} if gaussian_ply else {}
+    launch_passive: Callable[..., mujoco.viewer.Handle] = mujoco.viewer.launch_passive
+    self.viewer = launch_passive(
       self.mjm,
       self.mjd,
       key_callback=self._safe_key_callback,
       show_left_ui=False,
       show_right_ui=False,
+      **gaussian_options,
     )
     if self.viewer is None:
       raise RuntimeError("Failed to launch MuJoCo viewer")
@@ -213,6 +259,8 @@ class NativeMujocoViewer(BaseViewer):
     # Window may have been closed between is_running() check and here.
     if not v.is_running():
       return
+
+    self._sync_gaussian_asset()
 
     with self._mj_lock:
       sim = self.env.unwrapped.sim
@@ -440,6 +488,10 @@ class NativeMujocoViewer(BaseViewer):
     self.viewer = None
     if v:
       v.close()
+    if self._gaussian_assets is not None:
+      self._gaussian_assets.close()
+      self._gaussian_assets = None
+      self._gaussian_asset_id = None
     self.log("[INFO] MuJoCo viewer closed", VerbosityLevel.INFO)
 
   def reset_environment(self) -> None:

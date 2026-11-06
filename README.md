@@ -90,8 +90,8 @@ uv run tests/run_g1_3dgs_collision_demo.py
 With the custom MuJoCo 3DGS wheel installed, test the native desktop viewer:
 
 ```bash
-uv run tests/run_g1_3dgs_native_demo.py --steps 200
-uv run tests/run_g1_3dgs_native_demo.py --interactive
+uv run --no-sync tests/run_g1_3dgs_native_demo.py --steps 200
+uv run --no-sync tests/run_g1_3dgs_native_demo.py --interactive
 ```
 
 The smoke test waits for the Gaussian renderer, runs the pretrained policy for
@@ -164,6 +164,68 @@ for scene configuration, training, playback, multiple robots, recording, and
 performance notes.
 
 ## Training Examples
+
+For the G1 3DGS depth-training pipeline smoke check:
+
+```bash
+uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 1
+uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 2 \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+  --output /tmp/p6-vision-smoke
+```
+
+Add `--depth-metrics` to record raw missing, near, far, and in-range fractions
+for every world and rollout step in `rollout_depth.json`. The report summarizes
+these fractions and done counts; sampling includes auto-reset frames and adds
+CPU overhead, so use a separate run for performance measurements. See the
+[four-world rollout and multi-asset isolation results](requirements/validation/p6-rollout-isolation-2026-10-31.md).
+
+For a two-channel depth + validity comparison, add `--validity-mask`:
+
+```bash
+uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 2 --iterations 4 \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+  --output /tmp/p6-depth-baseline
+uv run tests/run_g1_3dgs_vision_smoke.py --validity-mask --num-envs 2 --iterations 4 \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+  --output /tmp/p6-depth-validity
+```
+
+The baseline task stays `Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth`; the additional
+task is `Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth-Validity`. Channel order is
+depth, then raw finite-positive validity. Missing depth and valid depth beyond
+5m become `(1, 0)` and `(1, 1)` respectively. This mask indicates renderer
+availability, not geometric accuracy or free space. Task experiment names are
+separate, and one-/two-channel checkpoints cannot be loaded interchangeably.
+See the [validity evaluation](requirements/validation/p6-validity-2026-10-31.md)
+for evidence and limits; short PPO checks do not establish task-level gains.
+
+This runs short CNN/PPO updates, checks changing depth frames and partial reset
+isolation, saves/reloads a visual checkpoint, and resumes an update. Outputs
+include diagnostic depth PNG/NPY files and a JSON report; no external logging
+service is used. It validates the pipeline, not locomotion convergence or visual
+benefit. The method combines PPO/GAE with spatial-softmax visual features,
+reusing the repository's YAM Vision implementation. See the
+[paper sources and method](requirements/mjlab-3dgs-p6-method.md),
+[BibTeX](requirements/mjlab-3dgs-p6-references.bib), and
+[runtime evidence and limitations](requirements/validation/p6-runtime-2026-10-30.md).
+
+To diagnose camera depth at a fixed pose with combined, robot-only, and
+Gaussian-only rendering:
+
+```bash
+uv run tests/run_g1_depth_diagnostics.py --output /tmp/p6-depth-diagnostics
+uv run tests/run_g1_depth_diagnostics.py --pose-sweep --output /tmp/p6-depth-poses
+```
+
+The G1 depth task maps missing zero-depth pixels to the far cutoff, so they are
+not presented as nearby obstacles. Missing and out-of-range pixels share the
+same normalized value; this does not establish free space. See the
+[depth quality report](requirements/validation/p6-depth-quality-2026-10-30.md).
+`--pose-sweep` additionally compares seven controlled root/arm configurations
+and reports self-occlusion and missing-depth fractions. These are kinematic
+configurations, not a simulated walking trajectory; see the
+[pose-sweep results](requirements/validation/p6-pose-sweep-2026-10-31.md).
 
 ### 1. Velocity Tracking
 

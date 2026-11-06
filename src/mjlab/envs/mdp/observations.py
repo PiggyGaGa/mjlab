@@ -111,8 +111,14 @@ def camera_depth(
   sensor_name: str,
   cutoff_distance: float,
   min_depth: float = 0.01,
+  zero_depth_as_far: bool = False,
 ) -> torch.Tensor:
-  """Normalized camera depth in CNN-compatible ``(B, 1, H, W)`` format."""
+  """Normalized camera depth in CNN-compatible ``(B, 1, H, W)`` format.
+
+  Set zero_depth_as_far for renderers that encode missing depth as zero.
+  Missing pixels then use cutoff_distance, without implying a measured surface.
+  NaNs are preserved for observation validation to detect errors.
+  """
   sensor = env.scene[sensor_name]
   assert isinstance(sensor, CameraSensor), (
     f"camera_depth requires a CameraSensor, got {type(sensor).__name__}"
@@ -120,7 +126,23 @@ def camera_depth(
   depth = sensor.data.depth
   assert depth is not None, f"Camera '{sensor_name}' has no depth data"
   depth = depth.permute(0, 3, 1, 2)
+  if zero_depth_as_far:
+    depth = torch.where(depth == 0.0, cutoff_distance, depth)
   return torch.clamp(depth, min=min_depth, max=cutoff_distance) / cutoff_distance
+
+
+def camera_depth_validity(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+  """Binary finite-positive raw depth mask in ``(B, 1, H, W)`` format.
+
+  Positive depth beyond the observation cutoff is still valid. This mask denotes
+  renderer availability, not geometric accuracy, confidence, or free space.
+  """
+  sensor = env.scene[sensor_name]
+  assert isinstance(sensor, CameraSensor)
+  depth = sensor.data.depth
+  assert depth is not None, f"Camera '{sensor_name}' has no depth data"
+  valid = torch.isfinite(depth) & (depth > 0)
+  return valid.permute(0, 3, 1, 2).to(dtype=depth.dtype)
 
 
 def projected_gravity_from_sensor(

@@ -1,0 +1,204 @@
+{
+  "cases": {
+    "combined": {
+      "zero_fraction": 0.19140625,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.2552083333333333,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [
+        1.1411504745483398,
+        1.5276562690734863,
+        3.152020573616028,
+        10.554139709472667,
+        18.60924530029297
+      ],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 16.585651397705078,
+      "shift_0_5m_changed_pixel_fraction": 0.9049479166666666,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    },
+    "robot_only": {
+      "zero_fraction": 1.0,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.0,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 0.0,
+      "shift_0_5m_changed_pixel_fraction": 0.0,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    },
+    "gaussian_only": {
+      "zero_fraction": 0.19140625,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.2552083333333333,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [
+        1.1411504745483398,
+        1.5276562690734863,
+        3.152020573616028,
+        10.554139709472667,
+        18.60924530029297
+      ],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 16.585651397705078,
+      "shift_0_5m_changed_pixel_fraction": 0.9049479166666666,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    }
+  },
+  "scope": "Fixed reset pose; ray-cast Gaussian opacity depth",
+  "combined_vs_gaussian_only_max_abs_delta": 0.0,
+  "gaussian_only_placeholder": "Non-colliding group-5 sphere at (1000,1000,1000); avoids empty BVH crash",
+  "pose_sweep": {
+    "reset": {
+      "combined": {
+        "zero_fraction": 0.19140625,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.2552083333333333,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          1.1411504745483398,
+          1.5276562690734863,
+          3.152020573616028,
+          10.554139709472667,
+          18.60924530029297
+        ]
+      },
+      "robot_only_hit_fraction": 0.0,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.0
+    },
+    "yaw_left": {
+      "combined": {
+        "zero_fraction": 0.23274739583333334,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.3515625,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          1.1695839166641235,
+          1.6785732507705688,
+          4.399529933929443,
+          12.53137187957764,
+          16.67134666442871
+        ]
+      },
+      "robot_only_hit_fraction": 0.0,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.0
+    },
+    "yaw_right": {
+      "combined": {
+        "zero_fraction": 0.2779947916666667,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.3131510416666667,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          1.172389268875122,
+          1.554311454296112,
+          4.469417572021484,
+          10.286393737792968,
+          16.206192016601562
+        ]
+      },
+      "robot_only_hit_fraction": 0.0,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.0
+    },
+    "pitch_forward": {
+      "combined": {
+        "zero_fraction": 0.2848307291666667,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.10514322916666667,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          1.02547287940979,
+          1.2194578170776367,
+          2.5310120582580566,
+          6.3047758102417015,
+          14.29377555847168
+        ]
+      },
+      "robot_only_hit_fraction": 0.0,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.0
+    },
+    "pitch_back": {
+      "combined": {
+        "zero_fraction": 0.14518229166666666,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.3421223958333333,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          1.4410109519958496,
+          2.1678786277770996,
+          3.979392170906067,
+          10.819482326507568,
+          19.612743377685547
+        ]
+      },
+      "robot_only_hit_fraction": 0.0,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.0
+    },
+    "left_arm_raised": {
+      "combined": {
+        "zero_fraction": 0.1826171875,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.203125,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          0.133114293217659,
+          0.1698731631040573,
+          2.7960472106933594,
+          10.154623031616211,
+          18.60924530029297
+        ]
+      },
+      "robot_only_hit_fraction": 0.19140625,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.19140625
+    },
+    "right_arm_raised": {
+      "combined": {
+        "zero_fraction": 0.146484375,
+        "positive_near_fraction": 0.0,
+        "beyond_cutoff_fraction": 0.24739583333333334,
+        "nonfinite_fraction": 0.0,
+        "positive_depth_quantiles_m": [
+          0.13311344385147095,
+          0.17119627743959429,
+          2.712586760520935,
+          10.397720527648927,
+          18.60924530029297
+        ]
+      },
+      "robot_only_hit_fraction": 0.19140625,
+      "combined_vs_gaussian_changed_pixel_fraction": 0.19140625
+    }
+  },
+  "pose_sweep_scope": "Seven controlled poses; not physical rollout or all-pose validation"
+}

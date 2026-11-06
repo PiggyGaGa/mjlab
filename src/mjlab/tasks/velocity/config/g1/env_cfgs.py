@@ -288,6 +288,7 @@ def unitree_g1_flat_3dgs_depth_env_cfg(
           "sensor_name": G1_3DGS_DEPTH_SENSOR,
           "cutoff_distance": 5.0,
           "min_depth": 0.05,
+          "zero_depth_as_far": True,
         },
       )
     },
@@ -299,4 +300,19 @@ def unitree_g1_flat_3dgs_depth_env_cfg(
   if play:
     cfg.viewer.geom_group = (0, 1, 1, 0, 0, 0)
 
+  return cfg
+
+
+def unitree_g1_flat_3dgs_depth_validity_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """Depth and raw validity channels; preserve the separate depth-only baseline."""
+  cfg = unitree_g1_flat_3dgs_depth_env_cfg(play=play)
+  camera = cfg.observations["camera"]
+  camera.terms["validity"] = ObservationTermCfg(
+    func=envs_mdp.camera_depth_validity,
+    params={"sensor_name": G1_3DGS_DEPTH_SENSOR},
+  )
+  # ObservationGroupCfg excludes the batch dimension: 0 is channel concatenation.
+  camera.concatenate_dim = 0
   return cfg

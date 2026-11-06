@@ -8,6 +8,22 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added an independent G1 depth+validity training task while preserving the
+  single-channel baseline. The second channel distinguishes missing raw depth
+  from valid depth beyond cutoff. Added matched-budget smoke checks and strict
+  checkpoint compatibility tests for the different CNN input shapes.
+
+- Added per-world rollout depth coverage statistics and a real-renderer regression
+  for two Gaussian assets, three worlds, and two cameras with isolated state/reset.
+
+- Added a seven-pose depth diagnostic sweep for root rotations and raised arms,
+  recording missing-depth coverage and robot self-occlusion separately.
+
+- Added a G1 3DGS depth-training smoke script covering temporal camera updates,
+  CNN/PPO updates, partial reset isolation, checkpoint reload, and resumed updates.
+  Method documentation maps PPO, GAE, spatial softmax, and 3DGS to their original
+  papers and provides BibTeX references for research use.
+
 - Added native 3DGS velocity acceptance checks for viewer controls, CPU contact
   replay under collision visibility changes, repeated window cleanup, and runtime
   comparisons. A test-only legacy phase observation adapter supports the August
@@ -89,6 +105,10 @@ Changed
 
 Fixed
 ^^^^^
+
+- G1 3DGS depth observations now map missing zero-depth samples to the far cutoff
+  instead of presenting them as nearby obstacles. Other camera-depth tasks retain
+  their default behavior. Added analytic depth tests and robot/splat diagnostics.
 
 - External MJCF terrain now keeps the conventional ``terrain`` root body used by
   contact sensors, and terrain-height ray sensors automatically follow the

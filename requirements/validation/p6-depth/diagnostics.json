@@ -1,0 +1,82 @@
+{
+  "cases": {
+    "combined": {
+      "zero_fraction": 0.19140625,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.2552083333333333,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [
+        1.1411504745483398,
+        1.5276562690734863,
+        3.152020573616028,
+        10.554139709472667,
+        18.60924530029297
+      ],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 16.585651397705078,
+      "shift_0_5m_changed_pixel_fraction": 0.9049479166666666,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    },
+    "robot_only": {
+      "zero_fraction": 1.0,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.0,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 0.0,
+      "shift_0_5m_changed_pixel_fraction": 0.0,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    },
+    "gaussian_only": {
+      "zero_fraction": 0.19140625,
+      "positive_near_fraction": 0.0,
+      "beyond_cutoff_fraction": 0.2552083333333333,
+      "nonfinite_fraction": 0.0,
+      "positive_depth_quantiles_m": [
+        1.1411504745483398,
+        1.5276562690734863,
+        3.152020573616028,
+        10.554139709472667,
+        18.60924530029297
+      ],
+      "fixed_pose_repeat_max_abs_delta": 0.0,
+      "shift_0_5m_max_abs_delta": 16.585651397705078,
+      "shift_0_5m_changed_pixel_fraction": 0.9049479166666666,
+      "camera_position_world": [
+        0.18853628646126697,
+        -0.498293472808283,
+        1.2499365258528101
+      ],
+      "camera_forward_world": [
+        0.9340061922943209,
+        -0.10322239142346473,
+        -0.3420198395775966
+      ],
+      "camera_below_horizon_degrees": 19.999981479601775
+    }
+  },
+  "scope": "Fixed reset pose; ray-cast Gaussian opacity depth",
+  "combined_vs_gaussian_only_max_abs_delta": 0.0,
+  "gaussian_only_placeholder": "Non-colliding group-5 sphere at (1000,1000,1000); avoids empty BVH crash"
+}

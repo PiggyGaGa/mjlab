@@ -42,6 +42,79 @@ keyboard and mouse operation still needs manual verification. CPU contact replay
 does not establish full MJWarp policy trajectory equivalence. Reported submission
 frequency is not display FPS, and GPU memory measurements include other processes.
 
+G1 depth training smoke check
+-----------------------------
+
+The task ``Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth`` reuses the repository's
+YAM Vision CNN path. Run:
+
+.. code-block:: bash
+
+    uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 2 \
+        --scene-manifest src/mjlab/asset_zoo/3dgs/room1/manifest.json \
+        --output /tmp/p6-vision-smoke
+
+The script saves normalized depth PNG/NPY samples, performs two short PPO updates,
+checks checkpoint roundtrip and a resumed update, and writes ``report.json``.
+It checks camera tensor updates and same-asset partial reset isolation; it does
+not establish depth accuracy, training convergence, or a benefit from vision.
+
+The learning algorithm is PPO (Schulman et al., 2017,
+`paper <https://arxiv.org/abs/1707.06347>`_) with GAE (Schulman et al., 2015,
+`paper <https://arxiv.org/abs/1506.02438>`_). The spatial-softmax/expected-position
+encoder follows the architecture idea of Levine et al., JMLR 2016,
+`End-to-End Training of Deep Visuomotor Policies <https://jmlr.org/papers/v17/15-522.html>`_.
+The optimizer here is PPO, not that paper's guided policy search. Static Gaussian
+assets follow Kerbl et al., 2023,
+`3D Gaussian Splatting <https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/>`_;
+their parameters are not optimized by the policy training loop.
+
+For equations, exact architecture, attribution boundaries, and BibTeX, see the
+repository files ``requirements/mjlab-3dgs-p6-method.md`` and
+``requirements/mjlab-3dgs-p6-references.bib``. Current experiments are pipeline
+checks; visual-task gains require task-level baselines and camera ablations.
+
+The separate task ``Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth-Validity`` uses
+``(B, 2, 48, 64)`` camera observations, ordered as normalized depth followed by
+``isfinite(raw_depth) & (raw_depth > 0)``. The original ``3DGS-Depth`` task remains
+the single-channel baseline. Both use the same cached CameraSensor output;
+validity does not trigger additional rendering. Positive depth beyond the
+cutoff remains valid, distinguishing missing ``(1, 0)`` from distant ``(1, 1)``.
+It denotes renderer availability, not confidence, geometry accuracy, or free space.
+
+Add ``--validity-mask`` to the smoke script to select that task and save validity
+PNGs alongside depth images. Experiment names differ, checkpoint infos record
+the encoding and channel count, and the first convolution's input shape prevents
+strict loading across the two encodings. No automatic weight conversion is
+provided. A mask-only output sensitivity probe checks connectivity; it does not
+establish successful use of validity during task learning.
+
+For fixed-pose depth diagnostics, run
+``uv run tests/run_g1_depth_diagnostics.py --output /tmp/p6-depth-diagnostics``.
+It separates robot-only, Gaussian-only, and combined rendering, saves raw NPY
+and depth PNG files, checks fixed-pose repeatability, and translates the camera
+by 0.5 m to check image response. The splat-only case uses an offscreen,
+non-colliding placeholder to avoid the installed backend's empty-BVH crash.
+Add ``--pose-sweep`` to compare seven controlled root/arm poses, including
+single-arm occlusion. This checks configurations, not a physical rollout or
+all possible robot poses.
+
+Add ``--depth-metrics`` to the vision smoke script to save per-world, per-step
+raw depth fractions in ``rollout_depth.json`` and summary statistics in the main
+report. Missing zeros, positive near depth, positive depth beyond cutoff, and
+in-range depth are counted separately. These include post-reset images; they do
+not attribute pixels to robot occlusion. CPU diagnostic sampling is included in
+the reported runtime and should be disabled for performance benchmarks.
+
+The installed renderer outputs axial camera Z-depth in meters. Gaussian depth
+is assigned at the splat where accumulated transmittance falls below 0.005;
+it is not expected depth or the nearest Gaussian center. If no mesh is hit and
+that opacity threshold is not reached, the result is zero. G1 enables
+``camera_depth(..., zero_depth_as_far=True)`` to map those missing values to
+the far cutoff before normalization. The default for other tasks is unchanged.
+Missing depth and valid depth beyond the cutoff are then indistinguishable;
+the encoding does not prove free space or eliminate holes in the reconstruction.
+
 Supported PLY format
 --------------------
 

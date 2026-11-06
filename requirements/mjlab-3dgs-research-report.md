@@ -1,5 +1,10 @@
 # mjlab 3DGS 机器人训练相关工作调研报告
 
+**专题更新：2026-10-31。** P8 的语义引导碰撞简化调研见
+[专题报告](mjlab-3dgs-p8-semantic-collision-research.md)与
+[参考文献 BibTeX](mjlab-3dgs-p8-references.bib)。本报告第 13 节汇总新的
+方法选择；下文 2026-10-24 的初轮调研保留其历史范围。
+
 ## 1. 报告结论
 
 **检索日期：2026-10-24。** 本报告是面向项目立项和论文选题的第一轮
@@ -494,9 +499,35 @@ ground-truth mesh，而不仅是展示若干成功案例。
 
 该部分适合作为系统贡献或实验贡献，不建议单独作为论文唯一创新。
 
-### 6.4 论文主任务建议：真实重建地形上的接触丰富运动
+### 6.4 当前主线：GaussGym 式真实重建场景视觉运动与导航
 
-推荐把论文主任务定义为：
+**2026-10-31 按用户方向更新。** 本项目先以真实重建场景中的视觉运动/
+导航为主线，在 mjlab + MuJoCo Warp 上建立训练与泛化基线；单台阶、楼梯
+和复杂地形转为后续扩展。下文原“接触丰富运动”建议保留为后续实验设计。
+
+GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真、训练像素策略，
+官方还提供目标到达/追踪类任务。作者描述的视觉策略使用 DINOv2 特征、
+本体状态、LSTM 和几何辅助预测；当前 G1 的单帧 depth CNN/PPO 与其不同。
+[作者方法说明](https://escontrela.me/gauss_gym/)、
+[官方训练入口](https://github.com/escontra/gauss_gym)。这些是方法来源，
+不是本项目已复现的算法；其硬件/吞吐结论不能直接迁移到 G1/MJWarp。
+
+拟议首个任务是：G1 在具有平坦支撑面、墙体和少量障碍的真实重建场景中，
+从随机起点到达随机目标。保留现有关节目标控制及 PPO 链路；actor 可读取
+目标方位/距离、本体状态和相机，障碍地图/最短路径仅供评估或特权对照。
+先使用人工校验碰撞，再替换 P8 自动代理；不把自动碰撞完成作为任务启动
+前置条件。RGB 是待增加的重点分支，已有 depth/validity 继续作几何基线。
+是否采用冻结视觉特征、时序记忆和辅助监督，按性能与消融决定。
+
+验收需有相同预算的 blind、privileged、mesh vision 与 3DGS vision，对 RGB
+与 depth 分别记录 encoder/监督差异。通过冻结/错配图像、改变障碍布局及
+未见场景测试排查记忆或目标向量捷径，报告到达率、碰撞、跌倒、路径效率
+与端到端训练吞吐。固定视觉后再比较碰撞代理，分离感知与物理误差。
+“改用 mjlab”是系统实现选择；论文贡献仍需依靠可复现实验确立。
+
+#### 后续课程：真实重建地形上的接触丰富运动
+
+后续接触敏感任务可定义为：
 
 > G1 在由真实场景 3DGS 重建得到的结构化复杂地形上，根据速度或 waypoint
 > 命令完成稳定行走，并比较不同碰撞代理对接触动力学、策略训练和跨代理迁移的
@@ -532,10 +563,10 @@ ground-truth mesh，而不仅是展示若干成功案例。
 | 候选任务 | 优点 | 主要问题 | 建议角色 |
 | --- | --- | --- | --- |
 | 平地 velocity tracking | 已有配置、训练稳定、迭代快 | 几乎不检验重建碰撞，难体现 3DGS 必要性 | 冒烟测试和性能基线 |
-| 结构化地形 locomotion | 直接放大高度、法线、边缘和孔洞误差；符合静态场景范围 | 需要准备 ground-truth/高质量参考几何 | **论文主任务** |
+| 结构化地形 locomotion | 直接放大高度、法线、边缘和孔洞误差；符合静态场景范围 | 需要准备 ground-truth/高质量参考几何 | 后续接触敏感主实验 |
 | 高动态 parkour | 展示效果强，对接触和几何敏感 | 控制难度、动力学和几何误差严重混杂；GaussGym 已覆盖类似展示 | 最终 stress test，不作为唯一主任务 |
 | 机器人 manipulation | 接触精度敏感，适合研究可操作表面 | 通常需要动态对象、质量、摩擦、抓取和实例分割，超出当前静态 PLY 范围 | 后续扩展或第二篇工作 |
-| 点机器人/移动底盘导航 | 容易构建并可测 free-space | SplatGym、Splat-Nav、SAFER-Splat 等已有较强覆盖，不能验证足底硬接触 | 辅助拓扑/可通行性实验 |
+| G1 视觉运动/目标到达 | 复用现有控制与原生视觉链路，可测感知、绕障与泛化 | 需排除盲策略捷径和场景记忆；仍要验证步行支撑 | 当前首个闭环 |
 
 Parkour 可以作为论文视频和极限测试，例如跨越间隙、跳上台阶或连续踏石，但不应
 成为唯一证据。若 parkour 策略失败，很难判断原因来自碰撞代理、reward、动作空间、
@@ -652,6 +683,8 @@ MJWarp 原生 render context 接入，适合作为工程 Phase 1；它建立了�
 
 ## 11. 推荐执行顺序
 
+以下为 2026-10-24 的初轮建议；当前 P8 优先级按第 13 节与 TODO 执行。
+
 1. 保留并完善当前 MJWarp 原生 3DGS 视觉接入。
 2. 把 SplatTransform 作为第一个外部碰撞基线，而不是竞争性重写目标。
 3. 建立 synthetic ground truth、碰撞质量指标和 physics SPS 基准。
@@ -686,3 +719,41 @@ MJWarp 原生 render context 接入，适合作为工程 Phase 1；它建立了�
 - [Geometric Red-Teaming for Robotic Manipulation](https://openreview.net/pdf?id=ux5EptB7xZ)
 - [Contact-preserving model simplification](https://doi.org/10.1016/j.cad.2012.05.009)
 
+## 13. P8 更新：语义引导的 primitive 碰撞代理
+
+2026-10-31 的新增需求是尽量将地面、墙面、台阶表示为少量长方体，降低
+运行期碰撞开销。推荐路线为：**语义/结构分组 → 有限平面与部件拟合 →
+有预算的 box/primitive 组合 → 复杂残差凸分解**。这是待实现和验证的项目
+方案，不能将已有方法的能力拼接后写成已经跑通的系统。
+
+本轮一手资料带来的关键选择是：
+
+- **语义前端优先评估 SceneSplat**：官方支持自定义 PLY 的独立特征推理，
+  适合现有资产入口；输出特征仍需类别解码与几何约束。Gaussian Grouping、
+  LangSplat 更适合具备源图像/相机和逐场景优化条件的备选路线。
+  [SceneSplat 官方说明](https://github.com/unique1i/SceneSplat)。
+- **平面/部件方法用于设计参照**：PGS、PlanarSplatting 和 GaussianBlock
+  提供结构化表达思路，但不是普通 PLY 到 MuJoCo box 的即用导出器。
+  [PlanarSplatting](https://icetttb.github.io/PlanarSplatting/)、
+  [GaussianBlock](https://github.com/Jiangshuyi0V0/GaussianBlock)。
+- **SAGE-3D 是直接相关工作**：其物理代理从原始设计 mesh 经 CoACD 获得，
+  不能作为“仅凭扫描 PLY 恢复碰撞”的已验证解法；语义与 Gaussian 碰撞
+  结合本身也不应宣称首创。[作者项目页](https://sage-3d.github.io/)。
+- **保留外部基线和残差路线**：SplatTransform 用于 PLY→碰撞 mesh 对照，
+  CoACD/VisACD/CuACD 用于已有 mesh 的凸分解候选。后两者的 GPU 加速
+  针对离线生成，不证明最终仿真更快。
+  [SplatTransform](https://developer.playcanvas.com/user-manual/splat-transform/collision/)、
+  [CoACD](https://github.com/SarahWeiii/CoACD)、
+  [VisACD](https://3dlg-hcvc.github.io/visacd/)、
+  [CuACD](https://arxiv.org/abs/2609.28731)。
+
+首版先实现 geometry-only 的有限平面/box 基线及可选语义输入，再在相同
+primitive 预算下评估语义收益。必须保留门洞、桌底空间、台阶边缘和有限地面
+边界，不能对同类点集直接套一个大包围盒。未知区域不能自动当作实心或自由
+空间，当前 room1 PLY 本身也没有语义标签。
+
+验收同时测量支撑面/边缘误差、误占自由空间、接触稳定性和独立 physics SPS；
+增加 box 数量可能增加候选接触对，因此“减少三角面”不足以证明加速。
+[MuJoCo 性能文档](https://mujoco.readthedocs.io/en/stable/modeling.html#performance-tuning)。
+本轮没有复现外部算法或产生性能实验，完整输入条件、文献边界、生成契约和
+消融设计见[专题报告](mjlab-3dgs-p8-semantic-collision-research.md)。

@@ -1,0 +1,11 @@
+{
+  "initial_depth_identical": true,
+  "baseline_actor_parameters": 257018,
+  "validity_actor_parameters": 257418,
+  "initial_missing_fraction": 0.240234375,
+  "initial_valid_beyond_cutoff_fraction": 0.28173828125,
+  "initial_missing_encoded_far_fraction": 0.240234375,
+  "validity_only_action_sensitivity": 0.005382440984249115,
+  "baseline_status": "passed",
+  "validity_status": "passed"
+}

@@ -72,3 +72,10 @@ def unitree_g1_3dgs_depth_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   }
   cfg.experiment_name = "g1_velocity_3dgs_depth"
   return cfg
+
+
+def unitree_g1_3dgs_depth_validity_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Use identical PPO/CNN settings with a distinct two-channel experiment name."""
+  cfg = unitree_g1_3dgs_depth_ppo_runner_cfg()
+  cfg.experiment_name = "g1_velocity_3dgs_depth_validity"
+  return cfg

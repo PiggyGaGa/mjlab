@@ -1,0 +1,385 @@
+{
+  "date": "2026-10-31T22:16:57.823809+08:00",
+  "task": "Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth",
+  "camera_encoding": "depth-zero-as-far-v1",
+  "mujoco": "3.16.0+3dgs",
+  "rsl_rl": "5.5.1",
+  "arguments": {
+    "num_envs": 2,
+    "steps": 24,
+    "iterations": 4,
+    "seed": 42,
+    "depth_metrics": true,
+    "validity_mask": false,
+    "scene_manifest": "src/mjlab/asset_zoo/3dgs/room1/manifest.json",
+    "device": "cuda:0",
+    "output": "/tmp/p6-validity-baseline"
+  },
+  "scope": "Pipeline smoke only; not visual task performance or convergence",
+  "manifest_sha256": "a61f0d6f21b2c7dc5e39bfe82b30fdde7416958363716bba3d96f6ba5daa0e40",
+  "agent_cfg": {
+    "seed": 42,
+    "num_steps_per_env": 24,
+    "max_iterations": 30000,
+    "obs_groups": {
+      "actor": [
+        "actor",
+        "camera"
+      ],
+      "critic": [
+        "critic",
+        "camera"
+      ]
+    },
+    "save_interval": 50,
+    "experiment_name": "g1_velocity_3dgs_depth",
+    "run_name": "",
+    "logger": "tensorboard",
+    "wandb_project": "mjlab",
+    "wandb_tags": [],
+    "resume": false,
+    "load_run": ".*",
+    "load_checkpoint": "model_.*.pt",
+    "clip_actions": null,
+    "upload_model": false,
+    "class_name": "OnPolicyRunner",
+    "actor": {
+      "hidden_dims": [
+        512,
+        256,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": true,
+      "cnn_cfg": {
+        "output_channels": [
+          16,
+          32
+        ],
+        "kernel_size": [
+          5,
+          3
+        ],
+        "stride": [
+          2,
+          2
+        ],
+        "padding": "zeros",
+        "activation": "elu",
+        "max_pool": false,
+        "global_pool": "none",
+        "spatial_softmax": true,
+        "spatial_softmax_temperature": 1.0
+      },
+      "distribution_cfg": {
+        "class_name": "GaussianDistribution",
+        "init_std": 1.0,
+        "std_type": "scalar"
+      },
+      "rnn_type": null,
+      "rnn_hidden_dim": 256,
+      "rnn_num_layers": 1,
+      "class_name": "mjlab.rl.spatial_softmax:SpatialSoftmaxCNNModel"
+    },
+    "critic": {
+      "hidden_dims": [
+        512,
+        256,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": true,
+      "cnn_cfg": {
+        "output_channels": [
+          16,
+          32
+        ],
+        "kernel_size": [
+          5,
+          3
+        ],
+        "stride": [
+          2,
+          2
+        ],
+        "padding": "zeros",
+        "activation": "elu",
+        "max_pool": false,
+        "global_pool": "none",
+        "spatial_softmax": true,
+        "spatial_softmax_temperature": 1.0
+      },
+      "distribution_cfg": null,
+      "rnn_type": null,
+      "rnn_hidden_dim": 256,
+      "rnn_num_layers": 1,
+      "class_name": "mjlab.rl.spatial_softmax:SpatialSoftmaxCNNModel"
+    },
+    "algorithm": {
+      "num_learning_epochs": 5,
+      "num_mini_batches": 4,
+      "learning_rate": 0.001,
+      "schedule": "adaptive",
+      "gamma": 0.99,
+      "lam": 0.95,
+      "entropy_coef": 0.01,
+      "desired_kl": 0.01,
+      "max_grad_norm": 1.0,
+      "value_loss_coef": 1.0,
+      "use_clipped_value_loss": true,
+      "clip_param": 0.2,
+      "normalize_advantage_per_mini_batch": false,
+      "optimizer": "adam",
+      "share_cnn_encoders": false,
+      "class_name": "PPO"
+    }
+  },
+  "environment_seed": 42,
+  "scene_assets": {
+    "assets": [
+      {
+        "path": "/home/yzt/Documents/3DGS/mjlab/src/mjlab/asset_zoo/3dgs/room1/point_cloud_2_transform.ply",
+        "pos": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "quat": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": 1.0,
+        "opacity_threshold": 0.0,
+        "bounds_min": null,
+        "bounds_max": null,
+        "max_splats": null,
+        "scale_encoding": "log",
+        "opacity_encoding": "logit",
+        "color_encoding": "sh_dc"
+      }
+    ],
+    "world_asset_ids": null
+  },
+  "initialization_seconds": 2.140656883999327,
+  "cuda_graph_enabled": true,
+  "observation_shapes": {
+    "actor": [
+      2,
+      99
+    ],
+    "critic": [
+      2,
+      109
+    ],
+    "camera": [
+      2,
+      1,
+      48,
+      64
+    ]
+  },
+  "partial_reset_other_world_state_and_depth": "passed",
+  "actor_parameter_count": 257018,
+  "rollout_and_update_seconds": 4.645183544000247,
+  "loss_history": [
+    {
+      "value": 0.49316616356372833,
+      "surrogate": -0.0392557580024004,
+      "entropy": 41.15436782836914
+    },
+    {
+      "value": 2.1802126288414003,
+      "surrogate": -0.11081551993265748,
+      "entropy": 41.159810066223145
+    },
+    {
+      "value": 0.6578890413045884,
+      "surrogate": -0.08216887451708317,
+      "entropy": 41.16414623260498
+    },
+    {
+      "value": 1.0891876459121703,
+      "surrogate": -0.10868494166061282,
+      "entropy": 41.16516551971436
+    }
+  ],
+  "depth_frame_max_abs_deltas": [
+    0.7620446681976318,
+    0.7627782225608826,
+    0.7635888457298279,
+    0.7681494951248169,
+    0.7731971144676208,
+    0.776877224445343,
+    0.798572301864624,
+    0.7992222905158997,
+    0.7878869771957397,
+    0.7878869771957397,
+    0.7977656722068787,
+    0.8007789850234985,
+    0.8024389147758484,
+    0.7740954160690308,
+    0.7657250165939331,
+    0.7250627875328064,
+    0.7131205797195435,
+    0.6816374063491821,
+    0.6759544610977173,
+    0.6915264129638672,
+    0.6826150417327881,
+    0.7109063863754272,
+    0.7220439910888672,
+    0.7354921102523804,
+    0.7358507513999939,
+    0.7521472573280334,
+    0.7390725016593933,
+    0.7497554421424866,
+    0.7538566589355469,
+    0.7592834830284119,
+    0.7637855410575867,
+    0.777313232421875,
+    0.7968582510948181,
+    0.8073757290840149,
+    0.8203378915786743,
+    0.8314659595489502,
+    0.8434543609619141,
+    0.8456426858901978,
+    0.863218367099762,
+    0.8696720600128174,
+    0.8687411546707153,
+    0.8789355754852295,
+    0.8849151730537415,
+    0.8901236653327942,
+    0.8990228772163391,
+    0.9223020672798157,
+    0.9386380910873413,
+    0.9388699531555176,
+    0.8986700773239136,
+    0.9126520156860352,
+    0.9162909984588623,
+    0.9263283610343933,
+    0.7838971614837646,
+    0.7851552367210388,
+    0.795885443687439,
+    0.806304931640625,
+    0.81170654296875,
+    0.8197363018989563,
+    0.8286862373352051,
+    0.8334746360778809,
+    0.8412907123565674,
+    0.8592029809951782,
+    0.9180577993392944,
+    0.9104547500610352,
+    0.9145866632461548,
+    0.9180806875228882,
+    0.9028397798538208,
+    0.9038705229759216,
+    0.9038705229759216,
+    0.9112599492073059,
+    0.9205721616744995,
+    0.9186436533927917,
+    0.9124530553817749,
+    0.9182924628257751,
+    0.9178645610809326,
+    0.915921151638031,
+    0.910699725151062,
+    0.9064897894859314,
+    0.8982499241828918,
+    0.8907050490379333,
+    0.8720280528068542,
+    0.8667953610420227,
+    0.8632975816726685,
+    0.8632975816726685,
+    0.8542402386665344,
+    0.8626172542572021,
+    0.9154468774795532,
+    0.9105859994888306,
+    0.917039155960083,
+    0.8476058840751648,
+    0.8401484489440918,
+    0.8366556167602539,
+    0.8308188915252686,
+    0.8379443287849426,
+    0.8373152613639832,
+    0.8311604261398315
+  ],
+  "actor_cnn_parameter_max_abs_change": 0.004208527505397797,
+  "camera_zeroing_action_max_abs_delta": 0.0019706785678863525,
+  "checkpoint_actor_critic_optimizer_roundtrip": "passed",
+  "resumed_update_losses": {
+    "value": 0.491546568274498,
+    "surrogate": -0.10797087354585529,
+    "entropy": 41.166311264038086
+  },
+  "checkpoint_resume_update": "passed",
+  "checkpoint_sha256": "af8e582607b1ad52bbaa67dd25c6321db180ac943e92b1c9604d5e5a2537d88a",
+  "rollout_depth_metrics": {
+    "samples_per_world": 120,
+    "post_step_done_count": [
+      1,
+      2
+    ],
+    "fraction_summary_by_world": {
+      "missing_fraction": {
+        "min": [
+          0.10807291666666667,
+          0.09375
+        ],
+        "mean": [
+          0.19602050781250008,
+          0.2530924479166667
+        ],
+        "max": [
+          0.4049479166666667,
+          0.7249348958333334
+        ]
+      },
+      "positive_near_fraction": {
+        "min": [
+          0.0,
+          0.0
+        ],
+        "mean": [
+          0.0,
+          0.0
+        ],
+        "max": [
+          0.0,
+          0.0
+        ]
+      },
+      "beyond_cutoff_fraction": {
+        "min": [
+          0.0791015625,
+          0.0
+        ],
+        "mean": [
+          0.37086859809027756,
+          0.15883246527777778
+        ],
+        "max": [
+          0.482421875,
+          0.4794921875
+        ]
+      },
+      "in_range_fraction": {
+        "min": [
+          0.2906901041666667,
+          0.2750651041666667
+        ],
+        "mean": [
+          0.43311089409722225,
+          0.5880750868055556
+        ],
+        "max": [
+          0.5908203125,
+          0.9016927083333334
+        ]
+      }
+    },
+    "scope": "Early PPO policy; post-step images include auto-reset frames; no self-occlusion attribution",
+    "timing_note": "CPU depth sampling adds diagnostic overhead to rollout timing"
+  },
+  "peak_torch_allocated_bytes": 39515648,
+  "status": "passed"
+}

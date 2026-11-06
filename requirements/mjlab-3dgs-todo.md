@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-10-30
+最后更新：2026-10-31
 
 ## 0. 项目总览
 
@@ -14,9 +14,9 @@
 | P3 | Play 前端（Viser/外部 viewer） | **完成（按当前范围收口）** | 新版 wheel 后续发布；增强验证转为后续加固 |
 | P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 后续由 P8 生成碰撞资产 |
 | P5 | 统一场景资产 | **完成** | 进入 P6 视觉训练 |
-| P6 | YAM Vision → G1 视觉训练适配 | **进行中** | depth runtime smoke test |
-| P7 | 单级台阶任务 | 未开始 | 对齐资产和四组基线 |
-| P8 | 自动碰撞生成 | 研究规划 | collision generator |
+| P6 | YAM Vision → G1 视觉训练适配 | **进行中：单/双通道对照与 validity 接入验证通过** | 真实多资产任务、规模性能及多种子任务收益验证 |
+| P7 | GaussGym 式视觉运动/导航闭环 | 未开始；台阶任务后移 | 真实重建场景目标到达、RGB 与 depth 对照 |
+| P8 | 自动碰撞生成 | 首轮语义简化专题调研完成；实现未开始 | 有限平面/box 基线、可替换语义前端与合规资产导出 |
 | P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
 
@@ -36,11 +36,11 @@ mjlab 3DGS
 ├── 物理场景
 │   ├── P4 外部 collision-only MJCF                [MVP 完成，阶段收口]
 │   ├── P5 PLY/MJCF manifest 与统一 transform      [完成]
-│   └── P8 3DGS 自动碰撞代理生成                   [研究规划]
+│   └── P8 3DGS 自动碰撞代理生成                   [专题调研完成；待实现]
 ├── 视觉闭环训练
 │   ├── P6 YAM Vision → G1 depth observation       [进行中]
-│   ├── P7 单级台阶视觉跨越                        [未开始]
-│   └── 多台阶、间隙、真实重建场景                 [后续]
+│   ├── P7 真实重建场景视觉运动/目标到达           [未开始]
+│   └── 单台阶、楼梯、复杂地形与间隙               [后续扩展]
 └── 质量与论文
     ├── P10 测试、文档、性能和发布                 [部分完成]
     └── P11 基线、消融、论文材料                   [持续进行]
@@ -51,11 +51,24 @@ mjlab 3DGS
 ```text
 P4 外部碰撞输入
   └── P5 统一视觉/碰撞资产
-      └── P6 训练视觉 observation
-          └── P7 单级台阶闭环
-              ├── 视觉—碰撞偏差实验
-              └── P8 自动碰撞代理替换手工碰撞
+      ├── P6 训练视觉 observation
+      │   └── P7 视觉运动/目标到达（先用手工碰撞资产）
+      └── P8 自动碰撞代理生成（与 P7 并行）
+
+P7 基线与评估接口 + P8 生成资产
+  └── 手工/自动碰撞替换对照与视觉—碰撞偏差实验
 ```
+
+P7 与 P8 互不作为启动前置条件；当前用户优先推进 P8。P7 的资产制作、MDP 和 blind/privileged
+基线可在 P6 剩余验证期间先行；视觉训练依赖 P6 对应链路。P8 依赖已建立的
+P4/P5 输入契约，不等待 P6/P7 完成。两条线成熟后再联合验收，不能因为
+并行计划已确定就标记代码、训练或算法已开始/完成。
+
+共享边界：P7 固定手工资产、配置与测试集作为基线；P8 输出独立版本的
+collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接口。
+自动资产通过几何/接触检查后，再在相同视觉资产和评估协议下替换对照，
+不在一次训练中途静默覆盖基线资产。GPU 密集训练/重建按资源预算安排，
+任务并行不要求重负载同时占满同一张卡。
 
 ### 0.3 每次开发后的强制更新
 
@@ -121,8 +134,8 @@ P4 外部碰撞输入
 - 已提供 schema v1 scene manifest，将 PLY、collision MJCF、SHA-256、
   坐标约定、统一 transform 和 spawn-point metadata 绑定为一个入口；
   train/play/demo 均可加载。
-- 当前训练任务仍不加载 PLY 或 3DGS CameraSensor，策略尚未使用视觉
-  observation。
+- 独立 G1 3DGS Depth 训练任务已读取相机 observation，单/双环境 CNN/PPO
+  短更新与 checkpoint 恢复通过；普通本体 G1 任务仍不创建相机工作负载。
 
 ### 尚未达到的能力
 
@@ -130,20 +143,22 @@ P4 外部碰撞输入
   连续运行已由用户人工确认。velocity 闭环策略已在普通 plane 上完成
   32 环境、20 秒、零跌倒的静态站立验证；room1 上的策略级定量接触
   指标留作后续加固，不阻塞 P4 MVP 收口。
-- 尚未让 G1 训练策略读取 3DGS CameraSensor observation。
-- 尚未建立单级台阶视觉闭环训练任务。
+- 尚未完成 G1 视觉训练的深度质量、规模验证和长训练，未证明视觉任务增益。
+- 尚未建立真实重建场景目标到达的视觉闭环任务；单台阶、楼梯和复杂地形后移。
 - 尚未自动从 3DGS 生成碰撞代理。
 - 尚未完成可选预处理缓存和正式性能基准；二者属于后期性能优化，不阻塞
   当前功能里程碑。
 
 ### 当前首要目标
 
-P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强化学习框架，
-而是复用仓库已有的 YAM Vision 路径，将 CameraSensor、标准化 depth、
-二维 observation group、Spatial-Softmax CNN 和 RSL-RL 接线适配到 G1；
-之后准备严格对齐的单台阶 PLY/MJCF 资产对并进入 P7。从 PLY 自动生成
-碰撞代理属于 P8。NPZ 预处理缓存仅优化初始化时间，不阻塞视觉训练，
-转入 P10 后期性能优化。
+P3、P4 已按当前范围收口，P5 已完成。P6 复用 YAM Vision 的 CameraSensor、
+标准化 depth、二维 observation group、Spatial-Softmax CNN 和 RSL-RL，
+目前 G1 小规模 PPO 更新与恢复训练链路已通过。项目主线调整为参考
+GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 MuJoCo Warp
+原生渲染。P6 补齐 RGB 接入、现有 depth/validity 对照与规模性能；P7 先做
+平坦支撑面场景中的随机目标到达和障碍绕行，台阶、楼梯与复杂地形放到
+后续。当前先推进 P8 的地面/墙体/障碍代理，P7 可用手工资产独立建立基线，
+不等待自动生成。NPZ 缓存仍属于 P10 后期优化。
 
 ## 3. 已完成工作
 
@@ -158,8 +173,8 @@ P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强�
   MuJoCo Warp 原生 renderer 的路线不同。
 - [x] 将项目意义、机器人应用方向和最小使用示例写入 README。
 - [x] 确定首个机器人为 Unitree G1。
-- [x] 确定首个视觉闭环任务为随机起点单级台阶跨越，采用
-  depth-first 路线。
+- [x] 2026-10-31 调整研究主线：参考 GaussGym 的真实重建场景视觉运动/
+  导航训练；首个闭环改为目标到达，增加 RGB 与 depth 对照，台阶任务后移。
 
 ### B. 3DGS 资产导入
 
@@ -358,6 +373,37 @@ P4 已暂时收口，P5 已完成。当前进入 P6：不重新建设视觉强�
 
 ### H. 当前验证证据
 
+- [x] 2026-10-31 核对 GaussGym 作者项目页及官方训练说明，更新任务定位、
+  RGB/时序建模候选与分阶段计划；本项是规划调整，没有复现 GaussGym，
+  未新增训练结果或关闭 P6/P7。来源见主调研报告第 6.4 节。
+- [x] 2026-10-31 完成 P8 语义引导碰撞简化的一手资料调研，核对 room1
+  PLY 字段与现有 manifest 边界。见
+  [专题报告](mjlab-3dgs-p8-semantic-collision-research.md)及
+  [BibTeX](mjlab-3dgs-p8-references.bib)。本项仅为文献/接口证据，
+  未安装或复现外部方法，没有碰撞质量或加速实验结论。
+- [x] 2026-10-31 独立 Depth-Validity 任务与单通道同 seed/预算短训练均通过，
+  初始 depth 逐像素一致，mask 能区分缺失与有效远端；checkpoint 严格
+  跨编码加载被拒绝。相关回归 `29 passed`，见
+  `validation/p6-validity-2026-10-31.md`；不声称任务收益。
+  最终 `make check` 与 `make docs` 均通过。
+- [x] 2026-10-31 四环境共 480 个环境帧的 raw depth 统计及 PPO/恢复更新
+  通过；合成双资产/三 world/双相机的深度解析值和状态/reset 隔离通过。
+  定向相机回归 `25 passed`，见 `validation/p6-rollout-isolation-2026-10-31.md`。
+  本轮 `make check` 与 `make docs` 均通过。
+- [x] 2026-10-31 `run_g1_depth_diagnostics.py --pose-sweep` 完成七姿态三路
+  分离渲染及重复一致性检查；原始 JSON/样例图已归档。`make check` 和
+  `make docs` 通过，保留动态 rollout 与多资产组待办。
+- [x] 2026-10-30 深度质量诊断及修复后双环境 PPO smoke 通过，见
+  `validation/p6-depth-quality-2026-10-30.md`；深度语义、G1 配置和 camera
+  回归 `24 passed`，最终 `make check` 通过。
+- [x] 2026-10-30 P6 单环境默认 PLY 和双环境 room1 manifest smoke 均通过，
+  命令、完整 agent 配置、loss、图像和 JSON 见
+  `validation/p6-runtime-2026-10-30.md`。两组均启用仿真 CUDA graph；
+  仅检查小规模链路，不声称训练收敛或视觉收益。
+- [x] 2026-10-30 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest tests/test_g1_3dgs_vision_config.py -q`：
+  `4 passed`（含真实 depth runtime）。
+- [x] 2026-10-30 P6 最终 `make check` 通过：Ruff、ty、Pyright 无错误。
+- [x] 2026-10-30 `make docs` 构建成功，包含 P6 方法出处与 smoke 用法。
 - [x] 2026-10-30 用户明确要求 P3 标记完成，并决定后续发布更新版本。
   依据已有最终 `make check`、13 项定向测试、真实窗口联调及用户确认的
   passive UI 修复，按当前范围收口；未执行的增强验证仍保留原状态。
@@ -568,8 +614,18 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 相机或渲染开销。首个注册任务为
 `Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth`。
 
+算法来源与论文写作依据见 `mjlab-3dgs-p6-method.md`，BibTeX 见
+`mjlab-3dgs-p6-references.bib`：PPO（Schulman et al., 2017）、GAE
+（Schulman et al., 2015）、Spatial Softmax 编码结构（Levine et al.,
+JMLR 2016）及 3DGS 表示（Kerbl et al., 2023）。本项目复用仓库 YAM
+Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
+作为原创贡献。运行证据见 `validation/p6-runtime-2026-10-30.md`。
+
 ### V0. YAM Vision 复用与静态配置
 
+- [x] 保留单通道 `3DGS-Depth` 基线，新增独立 `3DGS-Depth-Validity`
+  task/experiment，camera 按 channel 拼接为 `(B,2,48,64)`；共享同一
+  原始 camera 缓存，无额外渲染，PPO、奖励和本体 observation 保持一致。
 - [x] 新建真正加载 3DGS 的 training env 配置，不再在 `play=False` 时
   直接退回普通 flat 任务。
 - [x] 增加安装在 G1 torso/head 区域、向前下方俯视 `20°` 的训练
@@ -593,33 +649,96 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 ### V1. 运行时正确性
 
 - [ ] 编译单环境场景，确认相机安装位置、视线方向与 robot self-occlusion。
+- [x] 完成固定 reset 姿态诊断：实际下俯角约 20 度，robot-only 无命中，
+  combined 与 Gaussian-only raw depth 一致；固定姿态重复结果相同，
+  平移 0.5m 后约 90.5% 像素改变。动态姿态自遮挡仍待验收。
+- [x] 2026-10-31 七种可控姿态扫描通过，含 yaw、pitch 和单臂抬起。
+  抬臂时机器人遮挡约 19.14% 像素，最近深度约 0.133m；不能作为
+  缺失噪声过滤。缺失率约 14.52%–28.48%，仍需真实 rollout 覆盖率统计。
+  见 `validation/p6-pose-sweep-2026-10-31.md`；不是动力学轨迹验收。
+- [x] 解析 GPU 测试确认光轴 Z-depth、零值缺失、Gaussian opacity 阈值
+  深度语义。修复 G1 将缺失零值映射为近障碍的问题，显式启用
+  `zero_depth_as_far=True`；其他任务默认行为不变。
+- [ ] 评估动态缺失深度覆盖率与 validity mask；映射到 far 不代表自由空间。
+  当前固定姿态约 19.14% 缺失、25.52% 有效深度超出 5m cutoff。
+- [x] validity 接入与语义验证完成：raw finite-positive 为 1，零值为 0；
+  有效超量程深度仍为 1。单通道与双通道各完成四次 24-step PPO 更新、
+  重载后一次更新；仅翻转 mask 会改变动作输出，不代表已学会有效利用。
+  实际任务收益留待多种子实验，不关闭上方综合评估项。
+- [x] 真实四环境早期 PPO rollout 采样 480 个环境帧，平均缺失约 21.96%、
+  远端约 26.04%、量程内约 52.00%；单帧缺失最高 62.01%。包含 auto-reset
+  后图像，不声称稳定步态分布或动态自遮挡归因。validity 的接入验证已完成，
+  有效性收益仍待任务实验。
 - [x] 验证默认 room1 PLY 能进入单环境 depth observation。
-- [ ] 验证通过 `--scene-manifest` 覆盖的 PLY 能进入 depth observation。
+- [x] 验证通过 `--scene-manifest` 加载的 room1 PLY 能进入 depth observation；
+  双环境运行、形状与有限数值检查通过。不同替代资产另行验证。
 - [x] 验证单环境 depth 的 shape 为 `(1, 1, 48, 64)`、dtype 为
   `float32`、范围为 `[0, 1]`，且图像不是常数。
-- [ ] 验证 depth 随机器人运动持续更新。
-- [ ] 运行 RSL-RL CNN 前向与短 rollout，确认 actor/critic observation
-  group 和 checkpoint 保存/加载正常。
-- [ ] 增加冻结帧或逐帧差异检查，避免策略读取到不更新的图像。
+- [x] 单/双环境 rollout 中记录连续 depth 帧与 PNG/NPY，逐帧差异非零；
+  仅证明帧在更新，不据此证明深度语义、遮挡或几何精度正确。
+- [x] 运行 RSL-RL CNN 前向、两次 24-step rollout/PPO 更新，loss/gradient
+  有限且 actor CNN 权重改变；actor/critic/optimizer 保存重载通过，并
+  继续一次 24-step rollout/PPO 更新。相机置零会改变输出，仅验证连通性。
+- [x] 新增 `tests/run_g1_3dgs_vision_smoke.py` 的逐帧差异检查，冻结图像时报错。
 
 ### V2. 性能与并行训练
 
 - [ ] 验证多 world splat group、camera tensor 和 reset 隔离。
+- [x] 两环境共享 room1 资产的 camera tensor 与局部 reset 隔离通过；
+  reset env 0 后 env 1 的 qpos 和 depth 完全不变；四环境 smoke 也通过。
+- [x] 合成双资产/三 world/双相机验证分组 `(0,1,0)` 的解析深度、单 world
+  移动与 scene/sensor reset 隔离；两个 world 共享同一资产也不串扰。
+  不同真实资产的完整任务级测试仍待补，不关闭上方整体验收项。
 - [ ] 验证视觉 observation 与 CUDA graph 的兼容性。
+- [x] 当前机器 1/2/4 环境的实际仿真 CUDA graph 启用，视觉 rollout 和 PPO
+  更新通过；尚未关闭多配置兼容性验收项。
 - [ ] 测量不同 splat 数、分辨率、更新频率和 world 数下的吞吐及
   显存。
 - [x] 首版采用 YAM Vision 的独立 Spatial-Softmax CNN encoder，不把 depth
   展平后直接送入 MLP。
 - [ ] 为渲染失败、显存不足和无效相机配置增加错误处理。
+- [ ] 处理安装后端在空 mesh BVH / splat-only 配置下的原生退出（139）；
+  当前诊断工具使用离屏无碰撞占位几何，不代表后端问题已修复。
 
 ### V3. 后续训练增强（不阻塞 P6 MVP）
 
+- [ ] 在相同任务/预算下多种子比较单通道与 depth+validity，报告成功率、
+  回报、稳定性并做 mask-only 消融；当前只完成结构连通性与短训练验证。
 - [ ] 对比 actor/critic 都读取相机与 asymmetric critic（只读特权状态）。
 - [ ] 评估 privileged teacher → depth student 的 RSL-RL distillation。
 - [ ] 增加深度噪声、延迟、低频更新、遮挡和 dropout。
 - [ ] 评估 frame history 或 recurrent policy，避免单帧深度缺乏运动信息。
 
-## 7. 首个端到端任务：G1 单级台阶视觉跨越
+## 7. P7：GaussGym 式真实重建场景视觉运动与导航
+
+2026-10-31 按用户方向调整：先完成视觉运动与导航闭环，再做单台阶、楼梯
+和复杂地形。参考 GaussGym 的任务与训练思路，不迁移其仿真栈，也不声称
+现有 G1 depth CNN/PPO 已复现其算法。方法边界见主调研报告第 6.4 节。
+
+### N0. 首个目标到达任务（当前规划）
+
+- [ ] 固定一个具有平坦支撑面、墙体和少量障碍的重建场景，准备人工校验的
+  PLY/collision 对；冻结训练/测试出生点和目标采样协议。
+- [ ] 基于现有 G1 控制配置定义随机目标到达：策略使用本体状态、相机与
+  目标相对方位/距离；不提供障碍真值位置、路径或地图给非特权 actor。
+- [ ] 初版沿用现有关节目标动作；是否改成导航策略加冻结步态控制器，作为
+  后续独立设计决策，不能混淆两种策略的训练/成功率结果。
+- [ ] 增加目标进度、稳定行走与碰撞代价，定义到达、跌倒、停滞、超时和
+  非足端碰撞指标；随机起点/目标避免记忆固定时间动作。
+- [ ] P6 补齐独立 RGB 相机 observation/encoder 配置，保留 depth、
+  depth+validity 基线；先测吞吐和显存再决定 encoder 与历史长度。
+- [ ] 在同预算下比较 blind、privileged、mesh vision 与 3DGS vision；
+  RGB/depth 使用独立实验标识，报告 encoder 差异和额外监督。
+- [ ] 通过关闭、冻结或错配视觉，以及改变障碍布局的测试，验证视觉依赖；
+  不因平坦房间能走到目标就宣称策略学会了视觉导航。
+- [ ] 报告成功率、碰撞/跌倒、路径效率和端到端 SPS；先做同场景留出布局，
+  再测未见场景，区分记忆与跨场景泛化。
+- [ ] P8 资产通过几何/接触检查后，固定视觉和评估协议进行碰撞替换消融。
+
+### 7.1 后续扩展：单级台阶、楼梯与地形行走
+
+以下保留原单台阶方案作为后续课程，不再作为首个闭环验收前置条件。
+先使用手工对齐资产；视觉训练使用 P6 链路，自动碰撞生成仍可独立推进。
 
 ### S0. 手工资产基线
 
@@ -677,9 +796,19 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 
 该阶段在外部碰撞输入接口稳定后开展。它只负责输出符合既定
 契约的资产包，不应修改训练、Play 或物理场景加载接口。
+P4/P5 契约已经建立，P8 可与 P7 并行，不依赖视觉训练或台阶策略收敛。
+首个交付物是可复现的碰撞资产生成与导出基线，后续接入 P7 作替换对照。
+按当前用户优先级先推进 P8。专题结论见
+[语义简化调研](mjlab-3dgs-p8-semantic-collision-research.md)：先做有限平面/
+box 几何基线，再接可替换语义前端，残差使用有限数量的凸体或局部 mesh。
 
 ### G0. 算法基线
 
+- [x] 完成语义前端、平面/primitive 重建和碰撞生成方法的首轮专题调研，
+  区分 PLY-only、多视角图像与原始 mesh 输入条件，记录论文与公开代码边界。
+- [ ] 建立 center-only 有限平面/box 基线，保留门洞、地面边界和台阶边缘。
+- [ ] 小区域评估 SceneSplat 特征解码和标签质量；在相同 geom 预算下比较
+  geometry-only 与语义引导方案，保留人工标签作为诊断上界。
 - [ ] 建立 center-only 点云/voxel 基线。
 - [ ] 建立利用 Gaussian scale、rotation、opacity 的 covariance-aware 基线。
 - [ ] 比较 voxel occupancy、TSDF 和 marching cubes。
@@ -689,8 +818,11 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 
 ### G1. 生成管线
 
-- [ ] 在 collision report/manifest provenance 中记录生成参数、随机种子、
-  工具名称和版本。
+- [ ] 在独立 collision report/sidecar 中记录生成参数、随机种子、工具版本、
+  输入哈希和 Gaussian ID 映射；保持现有 manifest v1 契约不变。
+- [ ] 实现语义 sidecar 输入与部件分组，明确未知标签及几何残差的处理。
+- [ ] 实现有限 footprint、厚度和自由侧约束，按误差与 geom 预算合并/拆分
+  box；避免填实门洞、桌底或未观测区域。
 - [ ] 实现 opacity、scale、bounds 和离群点过滤。
 - [ ] 实现体素降采样、连通分量清理和孔洞处理。
 - [ ] 实现表面/占据重建。
@@ -700,6 +832,10 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 
 ### G2. 质量与任务感知简化
 
+- [ ] 建立含门洞、桌腿、台阶、坑洞和多层结构的 synthetic ground truth；
+  单独统计误占自由空间、支撑高度与边缘误差。
+- [ ] 比较固定 geom 预算下的语义消融，并分别测量离线生成时间、独立
+  physics SPS、接触/求解开销与含视觉的端到端吞吐。
 - [ ] 输出 splat、顶点、面、连通分量、包围盒和简化统计。
 - [ ] 检查退化面、重复面、非有限数据和明显非流形问题。
 - [ ] 计算碰撞表面与高置信度 Gaussian 的距离指标。
@@ -752,16 +888,52 @@ P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务�
 
 ## 13. 推荐执行顺序
 
-1. 完成 P6 CNN runner 构建、短 rollout、多环境隔离与性能验证。
-2. 建立一个严格对齐的单台阶 PLY/MJCF 资产对。
-3. 建立随机起点单级台阶 MDP，并先跑 blind/privileged 冒烟训练。
-4. 训练 mesh vision 与 3DGS vision，对视觉闭环进行消融验证。
-5. 完成视觉—碰撞偏差实验和正式性能基准。
-6. 在稳定接口之上实现自动碰撞代理生成。
-7. 扩展到多台阶、间隙、真实重建环境和论文实验。
+1. 当前先推进 P8 有限地面/墙体/障碍 box 基线与资产导出，再接语义前端；
+   保留 voxel/mesh 对照，不以完整语义模型复现阻塞几何基线。
+2. 收尾 P6 真实多资产、规模性能与异常处理，增加 RGB 输入候选；保留
+   depth、depth+validity，先测资源再决定是否引入大视觉 encoder/时序网络。
+3. P7 用手工校验资产建立目标到达 MDP、blind/privileged 基线，再训练
+   mesh vision 和 3DGS vision；P8 可独立推进，不等待导航策略收敛。
+4. 固定视觉资产和评估协议，对比手工/自动碰撞、视觉依赖及未见布局/场景。
+5. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
 
 ## 14. 更新记录
 
+- 2026-10-31：按用户方向将 GaussGym 式真实重建场景视觉运动/导航作为
+  主线，P7 首个闭环改为随机目标到达与障碍绕行，单台阶、楼梯与复杂地形
+  转为后续课程。P6 保留 depth/validity 并规划 RGB；P8 优先工作顺序不变。
+  本次仅调整研究与验收计划，不表示算法迁移或新增训练已完成。
+- 2026-10-31：按用户要求先开展 P8，完成语义引导简化碰撞的首轮专题
+  调研，补充主报告、独立方法报告和 BibTeX。建议有限平面/box 几何基线、
+  SceneSplat 语义前端与残差凸分解；记录门洞/边界约束、输入差异及公平
+  消融和性能协议。实现与外部复现尚未开始，不宣称性能收益。
+- 2026-10-31：按用户确认将 P7 与 P8 调整为并行工作线。P7 先使用
+  手工对齐资产建立视觉任务基线；P8 基于已稳定的 P4/P5 契约独立生成
+  碰撞资产，不再置于 P7 完成之后。记录资产版本冻结、联合评估和 GPU
+  资源边界；本次仅更新执行规划，不改变尚未开展工作的实际完成状态。
+- 2026-10-31：新增独立 depth+validity 对照任务，保留单通道基线与独立
+  experiment。完成 raw mask 语义、channel 拼接、真实 reset/step 对齐、
+  CNN/PPO 短训练及 checkpoint 编码边界测试；两组初始 depth 一致。
+  回归 `29 passed`，保存方法、对照报告和 mask 图像。mask 是工程观测
+  设计，不宣称算法创新或任务收益。
+- 2026-10-31：新增逐帧 raw depth 覆盖率统计，四环境早期 PPO/恢复训练
+  共 480 环境帧通过，记录缺失/远端/量程内比例与 done 次数。新增双资产、
+  三 world、双相机的解析深度及隔离测试，定向回归 `25 passed`。
+  保存原始报告，区分合成路由检查与真实多资产任务验收；下一步评估
+  validity 通道及规模性能，P6 仍保持进行中。
+- 2026-10-31：继续 P6 深度诊断，完成七姿态机器人/Gaussian/组合对照，
+  确认抬臂产生真实近处自遮挡；记录各姿态缺失/远端比例及验证边界。
+  补充 `--pose-sweep` 入口、归档报告与图像，P6 仍保持进行中。
+- 2026-10-30：继续 P6 深度质量验证，新增机器人/Gaussian 分离诊断及
+  解析深度测试，确认固定相机朝向与当前姿态无自遮挡；修复 G1 缺失
+  零深度被编码为近障碍的问题。修复后双环境 PPO/恢复训练 smoke 通过，
+  相关回归 `24 passed`、`make check` 通过。记录空 BVH 原生退出及诊断
+  占位几何方案，动态覆盖率、validity mask 与后端修复仍待后续完成。
+- 2026-10-30：启动 P6 运行时验证，新增视觉 smoke 脚本；单环境默认 PLY
+  与双环境 room1 manifest 均通过深度更新、CNN/PPO 更新、checkpoint
+  重载和继续训练，双环境局部 reset 隔离通过。新增方法来源文档与
+  BibTeX，区分 PPO/GAE、Spatial Softmax、3DGS 和本项目工程适配。
+  深度质量、人工自遮挡、多资产组和规模性能仍待验证，P6 不标记完成。
 - 2026-10-30：补全 README 中原生验收脚本的用法，增加旧 velocity 策略
   示例、采样时长与 JSON 输出、交互前端对照命令，以及自动验证边界。
 - 2026-10-30：按用户明确决定将 P3 标记为完成，当前范围阶段收口。

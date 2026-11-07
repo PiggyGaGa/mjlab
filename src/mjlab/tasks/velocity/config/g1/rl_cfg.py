@@ -18,6 +18,9 @@ _VISION_CNN_CFG = {
   "spatial_softmax_temperature": 1.0,
 }
 _VISION_MODEL_CLS = "mjlab.rl.spatial_softmax:SpatialSoftmaxCNNModel"
+_TEMPORAL_VISION_MODEL_CLS = (
+  "mjlab.rl.temporal_spatial_softmax:TemporalSpatialSoftmaxCNNModel"
+)
 
 
 def unitree_g1_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
@@ -78,4 +81,43 @@ def unitree_g1_3dgs_depth_validity_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Use identical PPO/CNN settings with a distinct two-channel experiment name."""
   cfg = unitree_g1_3dgs_depth_ppo_runner_cfg()
   cfg.experiment_name = "g1_velocity_3dgs_depth_validity"
+  return cfg
+
+
+def unitree_g1_3dgs_depth_validity_history_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Use the temporal CNN adapter for four depth-validity frames."""
+  cfg = unitree_g1_3dgs_depth_ppo_runner_cfg()
+  cfg.actor.class_name = _TEMPORAL_VISION_MODEL_CLS
+  cfg.critic.class_name = _TEMPORAL_VISION_MODEL_CLS
+  cfg.experiment_name = "g1_velocity_3dgs_depth_validity_history"
+  return cfg
+
+
+def unitree_g1_3dgs_depth_validity_history_robust_ppo_runner_cfg(
+  history_frames: int = 4,
+  history_stride: int = 2,
+) -> RslRlOnPolicyRunnerCfg:
+  """Select strided temporal frames for the robust observation task."""
+  cfg = unitree_g1_3dgs_depth_validity_history_ppo_runner_cfg()
+  assert cfg.actor.cnn_cfg is not None
+  assert cfg.critic.cnn_cfg is not None
+  temporal_cfg = {
+    "temporal_frames": history_frames,
+    "temporal_stride": history_stride,
+  }
+  cfg.actor.cnn_cfg = {**cfg.actor.cnn_cfg, **temporal_cfg}
+  cfg.critic.cnn_cfg = {**cfg.critic.cnn_cfg, **temporal_cfg}
+  cfg.experiment_name = "g1_velocity_3dgs_depth_validity_history_robust"
+  return cfg
+
+
+def unitree_g1_3dgs_depth_validity_history_robust_asymmetric_ppo_runner_cfg() -> (
+  RslRlOnPolicyRunnerCfg
+):
+  """Keep camera input actor-only for an asymmetric critic baseline."""
+  cfg = unitree_g1_3dgs_depth_validity_history_robust_ppo_runner_cfg()
+  cfg.critic.class_name = "MLPModel"
+  cfg.critic.cnn_cfg = None
+  cfg.obs_groups["critic"] = ("critic",)
+  cfg.experiment_name = "g1_velocity_3dgs_depth_validity_history_robust_asymmetric"
   return cfg

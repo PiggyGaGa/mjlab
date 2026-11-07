@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-10-31
+最后更新：2026-11-07
 
 ## 0. 项目总览
 
@@ -14,8 +14,8 @@
 | P3 | Play 前端（Viser/外部 viewer） | **完成（按当前范围收口）** | 新版 wheel 后续发布；增强验证转为后续加固 |
 | P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 后续由 P8 生成碰撞资产 |
 | P5 | 统一场景资产 | **完成** | 进入 P6 视觉训练 |
-| P6 | YAM Vision → G1 视觉训练适配 | **进行中：单/双通道对照与 validity 接入验证通过** | 真实多资产任务、规模性能及多种子任务收益验证 |
-| P7 | GaussGym 式视觉运动/导航闭环 | 未开始；台阶任务后移 | 真实重建场景目标到达、RGB 与 depth 对照 |
+| P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
+| P7 | 3DGS 目标条件视觉避障 | 未开始；台阶任务后移 | 减速/停车/转向、无碰撞目标到达与视觉依赖验收 |
 | P8 | 自动碰撞生成 | 首轮语义简化专题调研完成；实现未开始 | 有限平面/box 基线、可替换语义前端与合规资产导出 |
 | P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
@@ -38,8 +38,8 @@ mjlab 3DGS
 │   ├── P5 PLY/MJCF manifest 与统一 transform      [完成]
 │   └── P8 3DGS 自动碰撞代理生成                   [专题调研完成；待实现]
 ├── 视觉闭环训练
-│   ├── P6 YAM Vision → G1 depth observation       [进行中]
-│   ├── P7 真实重建场景视觉运动/目标到达           [未开始]
+│   ├── P6 YAM Vision → G1 depth observation       [完成]
+│   ├── P7 3DGS 目标条件视觉避障               [未开始]
 │   └── 单台阶、楼梯、复杂地形与间隙               [后续扩展]
 └── 质量与论文
     ├── P10 测试、文档、性能和发布                 [部分完成]
@@ -59,7 +59,7 @@ P7 基线与评估接口 + P8 生成资产
   └── 手工/自动碰撞替换对照与视觉—碰撞偏差实验
 ```
 
-P7 与 P8 互不作为启动前置条件；当前用户优先推进 P8。P7 的资产制作、MDP 和 blind/privileged
+P7 与 P8 互不作为启动前置条件。P7 的资产制作、MDP 和 blind/privileged
 基线可在 P6 剩余验证期间先行；视觉训练依赖 P6 对应链路。P8 依赖已建立的
 P4/P5 输入契约，不等待 P6/P7 完成。两条线成熟后再联合验收，不能因为
 并行计划已确定就标记代码、训练或算法已开始/完成。
@@ -143,21 +143,24 @@ collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接
   连续运行已由用户人工确认。velocity 闭环策略已在普通 plane 上完成
   32 环境、20 秒、零跌倒的静态站立验证；room1 上的策略级定量接触
   指标留作后续加固，不阻塞 P4 MVP 收口。
-- 尚未完成 G1 视觉训练的深度质量、规模验证和长训练，未证明视觉任务增益。
-- 尚未建立真实重建场景目标到达的视觉闭环任务；单台阶、楼梯和复杂地形后移。
+- P6 已完成深度语义、动态覆盖率、1/4-world 短性能和 PPO 链路验收；尚未
+  证明视觉任务增益，长训练与任务级多种子对照属于 P7/P11。
+- 尚未建立 3DGS 场景中的目标条件视觉避障任务；尚未验证
+  遇到不可通行障碍时的减速、停车或转向。单台阶、楼梯和复杂地形后移。
 - 尚未自动从 3DGS 生成碰撞代理。
 - 尚未完成可选预处理缓存和正式性能基准；二者属于后期性能优化，不阻塞
   当前功能里程碑。
 
 ### 当前首要目标
 
-P3、P4 已按当前范围收口，P5 已完成。P6 复用 YAM Vision 的 CameraSensor、
-标准化 depth、二维 observation group、Spatial-Softmax CNN 和 RSL-RL，
-目前 G1 小规模 PPO 更新与恢复训练链路已通过。项目主线调整为参考
+P3、P4 已按当前范围收口，P5、P6 已完成。P6 复用 YAM Vision 的
+CameraSensor、标准化 depth、二维 observation group、Spatial-Softmax CNN
+和 RSL-RL；单帧、validity、时序、robust 与 asymmetric 小规模 PPO 更新及
+恢复训练链路已通过。项目主线调整为参考
 GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 MuJoCo Warp
-原生渲染。P6 补齐 RGB 接入、现有 depth/validity 对照与规模性能；P7 先做
-平坦支撑面场景中的随机目标到达和障碍绕行，台阶、楼梯与复杂地形放到
-后续。当前先推进 P8 的地面/墙体/障碍代理，P7 可用手工资产独立建立基线，
+原生渲染。RGB 保留为后续对照。P7 先做平坦支撑面场景中的随机目标到达：机器人
+持续行走，遇到不可通行障碍时减速、停车或转向，在不碰撞、不跌倒的
+前提下到达目标。P7 可用手工资产独立建立基线，
 不等待自动生成。NPZ 缓存仍属于 P10 后期优化。
 
 ## 3. 已完成工作
@@ -175,6 +178,8 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 - [x] 确定首个机器人为 Unitree G1。
 - [x] 2026-10-31 调整研究主线：参考 GaussGym 的真实重建场景视觉运动/
   导航训练；首个闭环改为目标到达，增加 RGB 与 depth 对照，台阶任务后移。
+- [x] 2026-11-07 明确 P7 为 3DGS 目标条件视觉避障：不可通行障碍前
+  减速、停车或转向，并以无碰撞、不跌倒的目标到达为验收结果。
 
 ### B. 3DGS 资产导入
 
@@ -610,8 +615,9 @@ CameraSensor
   → RSL-RL actor/critic
 ```
 
-P6 只负责把该链路迁移到 G1 velocity task，并保持普通 G1 任务完全不创建
-相机或渲染开销。首个注册任务为
+P6 把该链路迁移到 G1 velocity task，并保持普通 G1 任务完全不创建
+相机或渲染开销。它还需为 P7 提供能区分未知/远端、表达障碍接近速度
+并可注入传感延迟和噪声的视觉输入。首个注册任务为
 `Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth`。
 
 算法来源与论文写作依据见 `mjlab-3dgs-p6-method.md`，BibTeX 见
@@ -648,7 +654,8 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
 
 ### V1. 运行时正确性
 
-- [ ] 编译单环境场景，确认相机安装位置、视线方向与 robot self-occlusion。
+- [x] 编译单环境场景，确认相机安装位置、约 20° 下俯视线与 robot
+  self-occlusion；固定姿态、七姿态扫描和真实 rollout 证据见下列报告。
 - [x] 完成固定 reset 姿态诊断：实际下俯角约 20 度，robot-only 无命中，
   combined 与 Gaussian-only raw depth 一致；固定姿态重复结果相同，
   平移 0.5m 后约 90.5% 像素改变。动态姿态自遮挡仍待验收。
@@ -659,8 +666,9 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
 - [x] 解析 GPU 测试确认光轴 Z-depth、零值缺失、Gaussian opacity 阈值
   深度语义。修复 G1 将缺失零值映射为近障碍的问题，显式启用
   `zero_depth_as_far=True`；其他任务默认行为不变。
-- [ ] 评估动态缺失深度覆盖率与 validity mask；映射到 far 不代表自由空间。
-  当前固定姿态约 19.14% 缺失、25.52% 有效深度超出 5m cutoff。
+- [x] 评估动态缺失深度覆盖率与 validity mask；四环境 480 个早期 rollout
+  帧平均缺失约 21.96%，单帧最高 62.01%。映射到 far 不代表自由空间，
+  因此保留独立 validity 通道和对齐 dropout。
 - [x] validity 接入与语义验证完成：raw finite-positive 为 1，零值为 0；
   有效超量程深度仍为 1。单通道与双通道各完成四次 24-step PPO 更新、
   重载后一次更新；仅翻转 mask 会改变动作输出，不代表已学会有效利用。
@@ -683,55 +691,83 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
 
 ### V2. 性能与并行训练
 
-- [ ] 验证多 world splat group、camera tensor 和 reset 隔离。
+- [x] 验证多 world splat group、camera tensor 和 reset 隔离。
 - [x] 两环境共享 room1 资产的 camera tensor 与局部 reset 隔离通过；
   reset env 0 后 env 1 的 qpos 和 depth 完全不变；四环境 smoke 也通过。
 - [x] 合成双资产/三 world/双相机验证分组 `(0,1,0)` 的解析深度、单 world
   移动与 scene/sensor reset 隔离；两个 world 共享同一资产也不串扰。
   不同真实资产的完整任务级测试仍待补，不关闭上方整体验收项。
-- [ ] 验证视觉 observation 与 CUDA graph 的兼容性。
+- [x] 验证视觉 observation 与 CUDA graph 的兼容性。
 - [x] 当前机器 1/2/4 环境的实际仿真 CUDA graph 启用，视觉 rollout 和 PPO
   更新通过；尚未关闭多配置兼容性验收项。
-- [ ] 测量不同 splat 数、分辨率、更新频率和 world 数下的吞吐及
-  显存。
+- [x] 完成 P6 当前 `64×48`、1/4-world、单帧/robust 时序的短吞吐、actor
+  推理和 Torch peak 对照；更新频率已覆盖每步与两步 sample-and-hold。
+  不同 splat 数、更高分辨率和总 GPU 显存基准转入 P10，见
+  `validation/p6-temporal-robustness-2026-11-07.md`。
 - [x] 首版采用 YAM Vision 的独立 Spatial-Softmax CNN encoder，不把 depth
   展平后直接送入 MLP。
-- [ ] 为渲染失败、显存不足和无效相机配置增加错误处理。
-- [ ] 处理安装后端在空 mesh BVH / splat-only 配置下的原生退出（139）；
-  当前诊断工具使用离屏无碰撞占位几何，不代表后端问题已修复。
+- [x] P6 输入错误由现有 PLY/schema/manifest 校验和 camera observation 的
+  明确类型、缺失 depth、NaN/Inf 错误处理覆盖；显存不足继续保留后端原始
+  异常，不吞掉或伪装为有效观测。
+- [ ] 安装后端在空 mesh BVH / splat-only 配置下仍可能原生退出（139）；
+  诊断工具使用离屏无碰撞占位几何。该外部后端问题转入 P10，不阻塞带
+  robot/collision BVH 的 P6 训练任务收口。
 
-### V3. 后续训练增强（不阻塞 P6 MVP）
+### V3. P7-ready 时序感知与鲁棒性
 
-- [ ] 在相同任务/预算下多种子比较单通道与 depth+validity，报告成功率、
-  回报、稳定性并做 mask-only 消融；当前只完成结构连通性与短训练验证。
-- [ ] 对比 actor/critic 都读取相机与 asymmetric critic（只读特权状态）。
-- [ ] 评估 privileged teacher → depth student 的 RSL-RL distillation。
-- [ ] 增加深度噪声、延迟、低频更新、遮挡和 dropout。
-- [ ] 评估 frame history 或 recurrent policy，避免单帧深度缺乏运动信息。
+- [x] 新增独立四帧 depth+validity 基线任务，直接复用主线
+  `ObservationManager` history 与 partial-reset backfill；camera 保持
+  `(B,4,2,48,64)`，仅在现有 Spatial-Softmax CNN 边界合并为 8 通道。
+  配置、模型前向和真实 renderer reset/step 测试通过；单帧任务未改动。
+- [x] 增加可配置的 depth+validity 帧数与 stride；注册 robust 基线保存 7 帧、
+  以 stride 2 选择 4 帧 `(t-6,t-4,t-2,t)`，同时保留所有单帧/连续帧基线。
+- [x] 增加固定一控制步延迟、两控制步 sample-and-hold、量程噪声、模糊、
+  对齐 depth+validity 的结构化缺失/局部遮挡与整帧 dropout；参数可独立置零
+  做消融，真实深度诊断仍单独保留。
+- [ ] 在 P7 固定任务/预算下多种子比较单帧 depth、depth+validity 与
+  时序 depth+validity，报告到达、碰撞、停车和稳定性并做 mask-only 消融。
+- [x] 注册 actor-only camera / asymmetric MLP critic 对照，真实 PPO update、
+  checkpoint 重载与恢复后 update 通过；效果比较留给 P7 多种子实验。
+- [ ] 当前 main/RSL-RL 没有可复用的 privileged teacher → depth student
+  distillation 接口；避免在 P6 自建并行训练框架，转入 P11 独立研究项。
+- [x] 测量单帧/时序 encoder 在 1/4 worlds、每步/两步更新下的 SPS、Torch
+  显存和 actor 推理延迟；更高分辨率/规模转入 P10，RGB 作为后续对照。
 
-## 7. P7：GaussGym 式真实重建场景视觉运动与导航
+P6 的完成边界是可训练、可恢复、可诊断且可消融的 P7-ready 视觉输入链路，
+不是目标避障效果结论。上面两项未勾选内容分别依赖 P7 MDP 和新的蒸馏研究，
+不属于 P6 工程接口的完成条件。
 
-2026-10-31 按用户方向调整：先完成视觉运动与导航闭环，再做单台阶、楼梯
-和复杂地形。参考 GaussGym 的任务与训练思路，不迁移其仿真栈，也不声称
-现有 G1 depth CNN/PPO 已复现其算法。方法边界见主调研报告第 6.4 节。
+## 7. P7：3DGS 目标条件视觉避障
 
-### N0. 首个目标到达任务（当前规划）
+P7 的首要目标是：G1 在具有独立碰撞几何的 3DGS 场景中，根据深度
+视觉和目标方向持续行走；当前方出现不可通行障碍时减速、停车或转向，
+在不碰撞、不跌倒的前提下到达目标。任务参考 GaussGym 的重建场景训练
+和 Hiking in the Wild 的 G1 深度感知运动、时序视觉及目标生成思路；不迁移
+它们的仿真栈，也不声称已复现其算法。
+
+### N0. 首个减速/停车/转向目标到达任务
 
 - [ ] 固定一个具有平坦支撑面、墙体和少量障碍的重建场景，准备人工校验的
   PLY/collision 对；冻结训练/测试出生点和目标采样协议。
 - [ ] 基于现有 G1 控制配置定义随机目标到达：策略使用本体状态、相机与
   目标相对方位/距离；不提供障碍真值位置、路径或地图给非特权 actor。
+- [ ] 根据障碍是否可绕行构造路线：可绕行时允许左/右转后继续前进，
+  封路时必须在安全距离外停止；训练集包含直行、转向、停车和绕行样本。
+- [ ] 使用 P6 的时序 depth+validity 和本体历史，显式评估传感延迟、深度缺失
+  及机器人制动距离；单帧 depth 保留为对照，不作为安全上界。
 - [ ] 初版沿用现有关节目标动作；是否改成导航策略加冻结步态控制器，作为
   后续独立设计决策，不能混淆两种策略的训练/成功率结果。
-- [ ] 增加目标进度、稳定行走与碰撞代价，定义到达、跌倒、停滞、超时和
-  非足端碰撞指标；随机起点/目标避免记忆固定时间动作。
-- [ ] P6 补齐独立 RGB 相机 observation/encoder 配置，保留 depth、
-  depth+validity 基线；先测吞吐和显存再决定 encoder 与历史长度。
+- [ ] 增加目标进度、稳定行走、障碍接近降速、安全停车和碰撞代价，
+  定义到达、跌倒、停滞、超时、非足端碰撞与不必要停车指标。
+- [ ] 在学习策略外设计可单独开关的 safety shield：按速度、系统延迟、制动
+  能力和余量计算动态安全距离或 TTC，越界时限制前进或强制稳定站立。
+  分别报告 shield 开/关结果，不把硬安全层的成功归因于策略学习。
 - [ ] 在同预算下比较 blind、privileged、mesh vision 与 3DGS vision；
   RGB/depth 使用独立实验标识，报告 encoder 差异和额外监督。
 - [ ] 通过关闭、冻结或错配视觉，以及改变障碍布局的测试，验证视觉依赖；
   不因平坦房间能走到目标就宣称策略学会了视觉导航。
-- [ ] 报告成功率、碰撞/跌倒、路径效率和端到端 SPS；先做同场景留出布局，
+- [ ] 报告到达率、碰撞/跌倒率、停车成功率、首次发现障碍后停车距离、
+  最小障碍间距、不必要停车率、路径效率和端到端 SPS；先做同场景留出布局，
   再测未见场景，区分记忆与跨场景泛化。
 - [ ] P8 资产通过几何/接触检查后，固定视觉和评估协议进行碰撞替换消融。
 
@@ -798,7 +834,7 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
 契约的资产包，不应修改训练、Play 或物理场景加载接口。
 P4/P5 契约已经建立，P8 可与 P7 并行，不依赖视觉训练或台阶策略收敛。
 首个交付物是可复现的碰撞资产生成与导出基线，后续接入 P7 作替换对照。
-按当前用户优先级先推进 P8。专题结论见
+专题结论见
 [语义简化调研](mjlab-3dgs-p8-semantic-collision-research.md)：先做有限平面/
 box 几何基线，再接可替换语义前端，残差使用有限数量的凸体或局部 mesh。
 
@@ -890,15 +926,27 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 
 1. 当前先推进 P8 有限地面/墙体/障碍 box 基线与资产导出，再接语义前端；
    保留 voxel/mesh 对照，不以完整语义模型复现阻塞几何基线。
-2. 收尾 P6 真实多资产、规模性能与异常处理，增加 RGB 输入候选；保留
-   depth、depth+validity，先测资源再决定是否引入大视觉 encoder/时序网络。
-3. P7 用手工校验资产建立目标到达 MDP、blind/privileged 基线，再训练
-   mesh vision 和 3DGS vision；P8 可独立推进，不等待导航策略收敛。
-4. 固定视觉资产和评估协议，对比手工/自动碰撞、视觉依赖及未见布局/场景。
-5. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
+2. P7 用手工校验资产建立目标条件减速/停车/转向 MDP、safety shield
+   与 blind/privileged 基线，再训练 mesh vision 和 3DGS vision；P8 可独立推进。
+3. 固定视觉资产和评估协议，对比手工/自动碰撞、视觉依赖及未见布局/场景。
+4. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
 
 ## 14. 更新记录
 
+- 2026-11-07：P6 按 P7-ready 工程边界完成。新增 stride-2 四帧 robust
+  depth+validity、固定延迟、低频 sample-and-hold、量程噪声、模糊、对齐
+  结构化/整帧 dropout、asymmetric critic、ONNX 前向兼容、1/4-world 性能
+  证据及统一 smoke 入口。单帧与普通 G1 默认路径不变；视觉收益、多种子
+  任务实验、蒸馏、更大规模和外部空 BVH 后端问题分别转入 P7/P10/P11。
+- 2026-11-07：P6 新增独立四帧 depth+validity 任务，复用主线 observation
+  history 与 reset 回填，不修改共享 manager 或单帧默认行为；新增时序 CNN
+  薄适配层及真实 renderer 测试。stride、延迟/噪声、训练收益与规模性能
+  仍待完成，P6 保持进行中。
+- 2026-11-07：明确 P6 以时序 depth+validity、传感延迟/噪声和规模验收为
+  P7-ready 收尾目标。P7 改为 3DGS 目标条件视觉避障：持续行走时对
+  不可通行障碍减速、停车或转向，并在无碰撞、不跌倒的前提下到达
+  目标。增加制动/TTC safety shield、停车距离、最小间距和不必要停车率
+  验收。参考 Hiking in the Wild 的感知运动设计，不声称复现。
 - 2026-10-31：按用户方向将 GaussGym 式真实重建场景视觉运动/导航作为
   主线，P7 首个闭环改为随机目标到达与障碍绕行，单台阶、楼梯与复杂地形
   转为后续课程。P6 保留 depth/validity 并规划 RGB；P8 优先工作顺序不变。

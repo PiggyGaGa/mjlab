@@ -6,7 +6,7 @@
       conaffinity="1"
       condim="3"
       friction="1.0 0.005 0.0001"
-      rgba="0.15 0.75 0.25 0.30"
+      rgba="0.15 0.75 0.25 1.0"
     />
   </default>
 
@@ -21,11 +21,11 @@
     />
 
     <!-- Fixed pseudo-random layout (seeded once and committed for reproducibility). -->
-    <geom name="pillar_00" type="cylinder" pos="2.20 0.90 0.70" size="0.22 0.70"/>
-    <geom name="pillar_01" type="cylinder" pos="-2.35 1.35 0.95" size="0.28 0.95"/>
-    <geom name="pillar_02" type="cylinder" pos="1.55 -2.40 0.80" size="0.19 0.80"/>
-    <geom name="pillar_03" type="cylinder" pos="-1.80 -2.10 0.60" size="0.25 0.60"/>
-    <geom name="pillar_04" type="cylinder" pos="3.10 -1.20 1.10" size="0.17 1.10"/>
-    <geom name="pillar_05" type="cylinder" pos="-3.00 -0.45 0.75" size="0.21 0.75"/>
+    <geom name="pillar_00" group="1" type="cylinder" pos="2.20 0.90 0.70" size="0.22 0.70"/>
+    <geom name="pillar_01" group="1" type="cylinder" pos="-2.35 1.35 0.95" size="0.28 0.95"/>
+    <geom name="pillar_02" group="1" type="cylinder" pos="1.55 -2.40 0.80" size="0.19 0.80"/>
+    <geom name="pillar_03" group="1" type="cylinder" pos="-1.80 -2.10 0.60" size="0.25 0.60"/>
+    <geom name="pillar_04" group="1" type="cylinder" pos="3.10 -1.20 1.10" size="0.17 1.10"/>
+    <geom name="pillar_05" group="1" type="cylinder" pos="-3.00 -0.45 0.75" size="0.21 0.75"/>
   </worldbody>
 </mujoco>

@@ -286,10 +286,11 @@ def _parse_asset(
   dependencies: list[SceneManifestFile] = []
   if expected_type == "mjcf":
     geom_group = obj.get("geom_group", 3)
-    if not isinstance(geom_group, int) or isinstance(geom_group, bool):
-      raise ValueError(f"{label}.geom_group must be an integer from 0 to 5")
-    if not 0 <= geom_group <= 5:
-      raise ValueError(f"{label}.geom_group must be between 0 and 5")
+    if geom_group is not None:
+      if not isinstance(geom_group, int) or isinstance(geom_group, bool):
+        raise ValueError(f"{label}.geom_group must be null or an integer from 0 to 5")
+      if not 0 <= geom_group <= 5:
+        raise ValueError(f"{label}.geom_group must be between 0 and 5")
     raw_dependencies = obj.get("dependencies", [])
     if not isinstance(raw_dependencies, list):
       raise ValueError(f"{label}.dependencies must be a JSON array")

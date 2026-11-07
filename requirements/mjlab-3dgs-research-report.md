@@ -1,6 +1,6 @@
 # mjlab 3DGS 机器人训练相关工作调研报告
 
-**专题更新：2026-10-31。** P8 的语义引导碰撞简化调研见
+**专题更新：2026-11-07。** P8 的语义引导碰撞简化调研见
 [专题报告](mjlab-3dgs-p8-semantic-collision-research.md)与
 [参考文献 BibTeX](mjlab-3dgs-p8-references.bib)。本报告第 13 节汇总新的
 方法选择；下文 2026-10-24 的初轮调研保留其历史范围。
@@ -499,11 +499,11 @@ ground-truth mesh，而不仅是展示若干成功案例。
 
 该部分适合作为系统贡献或实验贡献，不建议单独作为论文唯一创新。
 
-### 6.4 当前主线：GaussGym 式真实重建场景视觉运动与导航
+### 6.4 当前主线：3DGS 目标条件视觉避障
 
-**2026-10-31 按用户方向更新。** 本项目先以真实重建场景中的视觉运动/
-导航为主线，在 mjlab + MuJoCo Warp 上建立训练与泛化基线；单台阶、楼梯
-和复杂地形转为后续扩展。下文原“接触丰富运动”建议保留为后续实验设计。
+**2026-11-07 按用户方向更新。** 本项目先以真实重建场景中的目标条件
+视觉避障为主线，在 mjlab + MuJoCo Warp 上建立训练与泛化基线；单台阶、
+楼梯和复杂地形转为后续扩展。
 
 GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真、训练像素策略，
 官方还提供目标到达/追踪类任务。作者描述的视觉策略使用 DINOv2 特征、
@@ -512,17 +512,24 @@ GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真�
 [官方训练入口](https://github.com/escontra/gauss_gym)。这些是方法来源，
 不是本项目已复现的算法；其硬件/吞吐结论不能直接迁移到 G1/MJWarp。
 
-拟议首个任务是：G1 在具有平坦支撑面、墙体和少量障碍的真实重建场景中，
-从随机起点到达随机目标。保留现有关节目标控制及 PPO 链路；actor 可读取
-目标方位/距离、本体状态和相机，障碍地图/最短路径仅供评估或特权对照。
-先使用人工校验碰撞，再替换 P8 自动代理；不把自动碰撞完成作为任务启动
-前置条件。RGB 是待增加的重点分支，已有 depth/validity 继续作几何基线。
-是否采用冻结视觉特征、时序记忆和辅助监督，按性能与消融决定。
+《Hiking in the Wild》与本项目共用 G1、29 关节目标、深度视觉与 PPO，
+其时序深度、传感延迟/噪声、目标产生和安全接触设计比 YAM Vision 抓取
+链路更接近感知运动。但它主要解决楼梯、平台、斜坡和间隙穿越，不直接
+定义竖直墙体/柱子前的制动与平面绕行；官方实现依赖 Isaac Lab，不能
+作为 mjlab 的即插即用基线。[论文](https://arxiv.org/abs/2601.07718)、
+[官方任务](https://github.com/project-instinct/InstinctLab/tree/main/source/instinctlab/instinctlab/tasks/parkour)。
 
-验收需有相同预算的 blind、privileged、mesh vision 与 3DGS vision，对 RGB
-与 depth 分别记录 encoder/监督差异。通过冻结/错配图像、改变障碍布局及
-未见场景测试排查记忆或目标向量捷径，报告到达率、碰撞、跌倒、路径效率
-与端到端训练吞吐。固定视觉后再比较碰撞代理，分离感知与物理误差。
+拟议首个任务是：G1 在具有平坦支撑面、墙体和少量障碍的 3DGS 场景中，
+从随机起点到达随机目标；对可绕行障碍转向，对封路障碍减速并在安全距离外
+停车。保留现有关节目标控制及 PPO 链路；actor 读取目标方位/距离、本体状态与
+时序 depth+validity，障碍地图/最短路径仅供评估或特权对照。先使用人工
+校验碰撞，再替换 P8 自动代理。RGB 保留为后续对照。
+
+验收需有相同预算的 blind、privileged、mesh vision 与 3DGS vision。通过
+关闭/冻结/错配图像、改变障碍布局及未见场景测试排查记忆或目标向量
+捷径，报告到达率、碰撞/跌倒率、停车成功率、首次发现后停车距离、最小
+障碍间距、不必要停车率、路径效率与端到端训练吞吐。safety shield 开/关
+分开报告，不把硬停车的成功归因于策略学习。
 “改用 mjlab”是系统实现选择；论文贡献仍需依靠可复现实验确立。
 
 #### 后续课程：真实重建地形上的接触丰富运动
@@ -566,7 +573,7 @@ GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真�
 | 结构化地形 locomotion | 直接放大高度、法线、边缘和孔洞误差；符合静态场景范围 | 需要准备 ground-truth/高质量参考几何 | 后续接触敏感主实验 |
 | 高动态 parkour | 展示效果强，对接触和几何敏感 | 控制难度、动力学和几何误差严重混杂；GaussGym 已覆盖类似展示 | 最终 stress test，不作为唯一主任务 |
 | 机器人 manipulation | 接触精度敏感，适合研究可操作表面 | 通常需要动态对象、质量、摩擦、抓取和实例分割，超出当前静态 PLY 范围 | 后续扩展或第二篇工作 |
-| G1 视觉运动/目标到达 | 复用现有控制与原生视觉链路，可测感知、绕障与泛化 | 需排除盲策略捷径和场景记忆；仍要验证步行支撑 | 当前首个闭环 |
+| G1 目标条件视觉避障 | 复用现有控制与原生视觉链路，可测减速、停车、绕障与泛化 | 需排除盲策略捷径和场景记忆；学习策略不提供硬安全保证 | 当前首个闭环 |
 
 Parkour 可以作为论文视频和极限测试，例如跨越间隙、跳上台阶或连续踏石，但不应
 成为唯一证据。若 parkour 策略失败，很难判断原因来自碰撞代理、reward、动作空间、
@@ -698,6 +705,7 @@ MJWarp 原生 render context 接入，适合作为工程 Phase 1；它建立了�
 
 - [MuJoCo Warp 3DGS 官方文档](https://mujoco.readthedocs.io/en/latest/mjwarp/#d-gaussian-splatting-3dgs)
 - [GaussGym 论文](https://arxiv.org/abs/2510.15352)、[项目页](https://www.escontrela.me/gauss_gym/)、[代码](https://github.com/escontra/gauss_gym)
+- [Hiking in the Wild 论文](https://arxiv.org/abs/2601.07718)、[项目页](https://project-instinct.github.io/hiking-in-the-wild/)、[代码](https://github.com/project-instinct/InstinctLab)
 - [MuGS 代码与文档](https://github.com/Renforce-Dynamics/MuGS)
 - [DISCOVERSE 论文](https://arxiv.org/abs/2507.21981)、[项目页](https://air-discoverse.github.io/)、[代码](https://github.com/discoverse-dev/DISCOVERSE)
 - [SplatGym 论文](https://arxiv.org/abs/2410.19564)、[代码](https://github.com/SplatLearn/SplatGym)

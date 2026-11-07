@@ -93,7 +93,12 @@
         "type": {"const": "mjcf"},
         "path": {"$ref": "#/$defs/relativePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
-        "geom_group": {"type": "integer", "minimum": 0, "maximum": 5},
+        "geom_group": {
+          "oneOf": [
+            {"type": "integer", "minimum": 0, "maximum": 5},
+            {"type": "null"}
+          ]
+        },
         "dependencies": {
           "type": "array",
           "items": {"$ref": "#/$defs/file"}

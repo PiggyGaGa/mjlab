@@ -8,6 +8,18 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added an independent four-frame G1 3DGS depth+validity task. It reuses the
+  observation manager's history buffers and preserves image structure as
+  ``(B, 4, 2, 48, 64)``; a small model adapter stacks time and channels only at
+  the existing spatial-softmax CNN boundary. Single-frame tasks are unchanged.
+
+- Added robust and asymmetric variants of the temporal G1 3DGS task. The robust
+  variant selects four frames at stride two, models one-step latency and a
+  two-step sample period, and applies aligned range noise, blur, structured
+  occlusion, and frame dropout to depth+validity. The asymmetric variant keeps
+  camera input actor-only. The vision smoke tool now covers every P6 encoding and
+  reports actor inference, rollout throughput, update time, and Torch memory.
+
 - Added an independent G1 depth+validity training task while preserving the
   single-channel baseline. The second channel distinguishes missing raw depth
   from valid depth beyond cutoff. Added matched-budget smoke checks and strict
@@ -81,6 +93,17 @@ Added
 
 Changed
 ^^^^^^^
+
+- The bundled room1 synthetic pillars are now opaque, camera-visible collision
+  geoms, so the native 3DGS compositor preserves their depth occlusion. Its physical
+  ground remains hidden from the policy camera. Scene manifests can set
+  ``collision.geom_group`` to ``null`` to preserve per-geom MJCF groups.
+
+- Refined the planned G1 3DGS training milestones. P6 now prepares temporal
+  depth+validity observations, sensor delay/noise evaluation, and scale benchmarks.
+  P7 now targets goal-conditioned obstacle avoidance: decelerating, stopping, or
+  turning around impassable obstacles while reaching a goal without collision or
+  falling, with a separately evaluated braking/TTC safety shield.
 
 - Linux x86_64 Python 3.12/3.13 uv environments now use the custom MuJoCo
   3DGS wheels from the fork's v1.0 GitHub Release instead of a local wheel path.

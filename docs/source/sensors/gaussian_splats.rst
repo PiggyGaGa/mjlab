@@ -89,6 +89,30 @@ strict loading across the two encodings. No automatic weight conversion is
 provided. A mask-only output sensitivity probe checks connectivity; it does not
 establish successful use of validity during task learning.
 
+The independent task
+``Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth-Validity-History`` keeps four
+chronological depth+validity frames as ``(B, 4, 2, 48, 64)``. It reuses the
+observation manager's standard history and partial-reset backfill behavior. At
+the CNN boundary, time and channel dimensions are stacked into eight input
+channels; the spatial-softmax encoder, PPO settings, rewards, and action space
+otherwise match the single-frame baseline. This task does not yet add frame
+stride, simulated sensor delay, or noise.
+
+For deployment-corruption experiments, use
+``Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth-Validity-History-Robust``. It stores
+seven consecutive observations and selects four at stride two, adds a fixed
+one-control-step delay, and holds camera samples for two control steps. During
+training, depth+validity are corrupted together with depth range noise, blur,
+structured missing regions, and occasional full-frame dropout; missing pixels
+remain encoded as depth 1 and validity 0. Play disables random corruption while
+retaining sample timing and latency. Append ``-Asymmetric`` to use the actor-only
+camera baseline with an MLP critic.
+
+The smoke script accepts ``--temporal-history``, ``--robust-history``, or
+``--asymmetric-critic``. These modes also report actor inference throughput,
+rollout environment-steps per second, PPO update time, and peak Torch allocation.
+The latter excludes renderer/Warp allocations and is not total GPU memory.
+
 For fixed-pose depth diagnostics, run
 ``uv run tests/run_g1_depth_diagnostics.py --output /tmp/p6-depth-diagnostics``.
 It separates robot-only, Gaussian-only, and combined rendering, saves raw NPY
@@ -367,9 +391,13 @@ Camera and terrain-height ray sensors currently share one MuJoCo Warp BVH. To ke
 the hidden physical plane out of the rendered 3DGS depth, this first visual task
 removes ``foot_height_scan`` and the two rewards that depend on it
 (``foot_clearance`` and ``foot_swing_height``). Contact, velocity tracking, posture,
-smoothness, and the remaining locomotion signals are preserved. P7 will add
-task-specific step-clearance metrics without merging hidden collision geometry into
-the visual camera context.
+smoothness, and the remaining locomotion signals are preserved. The planned P7
+target-conditioned avoidance task will add deceleration, stopping-distance,
+minimum-clearance, collision, and goal-reaching metrics. The bundled room1 smoke
+asset exposes its synthetic group-1 pillars to the policy camera while keeping its
+group-3 physical ground hidden. This validates the visual-control loop but exposes
+exact obstacle geometry; final 3DGS perception experiments should instead render
+obstacles as splats and keep their aligned collision proxies hidden from the actor.
 
 Play a local velocity checkpoint in a manifest scene
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -14,8 +14,8 @@
   "collision": {
     "type": "mjcf",
     "path": "collision/collision.xml",
-    "sha256": "10c9b592ebc9293602acc37fbfde1bf94ad96e0283f86a4e0c60ad1ee3a58570",
-    "geom_group": 3,
+    "sha256": "606c4aeae97787f1d0df6c93e0d49f13988b552d10962831730d4e757054e763",
+    "geom_group": null,
     "dependencies": []
   },
   "world_from_scene": {

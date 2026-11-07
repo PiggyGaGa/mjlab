@@ -24,6 +24,7 @@ from mjlab.tasks.g1_3dgs import (
   apply_g1_3dgs_play_cfg,
   apply_g1_3dgs_scene_cfg,
 )
+from mjlab.tasks.g1_3dgs_vision import camera_depth_validity_robust
 from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
@@ -253,8 +254,9 @@ def unitree_g1_flat_3dgs_depth_env_cfg(
   apply_g1_3dgs_scene_cfg(cfg)
 
   # The policy camera is rigidly attached near the head and looks 20 degrees
-  # downward along the robot's forward (+X) direction. Only robot visual geoms are
-  # rasterized; the Gaussian scene supplies the environment appearance and depth.
+  # downward along the robot's forward (+X) direction. Robot visual geoms and
+  # explicit synthetic obstacles are rasterized; the Gaussian scene supplies the
+  # remaining environment appearance and depth.
   camera = CameraSensorCfg(
     name=G1_3DGS_DEPTH_SENSOR,
     parent_body="robot/torso_link",
@@ -264,7 +266,7 @@ def unitree_g1_flat_3dgs_depth_env_cfg(
     width=64,
     height=48,
     data_types=("depth",),
-    enabled_geom_groups=(2,),
+    enabled_geom_groups=(1, 2),
     use_shadows=False,
     use_textures=True,
   )
@@ -315,4 +317,55 @@ def unitree_g1_flat_3dgs_depth_validity_env_cfg(
   )
   # ObservationGroupCfg excludes the batch dimension: 0 is channel concatenation.
   camera.concatenate_dim = 0
+  return cfg
+
+
+def unitree_g1_flat_3dgs_depth_validity_history_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """Keep four depth-validity frames for temporal obstacle perception."""
+  cfg = unitree_g1_flat_3dgs_depth_validity_env_cfg(play=play)
+  camera = cfg.observations["camera"]
+  camera.history_length = 4
+  camera.flatten_history_dim = False
+  # Each term becomes (T, C, H, W); concatenate depth and validity on C.
+  camera.concatenate_dim = 1
+  return cfg
+
+
+def unitree_g1_flat_3dgs_depth_validity_history_robust_env_cfg(
+  play: bool = False,
+  history_frames: int = 4,
+  history_stride: int = 2,
+) -> ManagerBasedRlEnvCfg:
+  """Add strided history, one-step latency, and range noise for robustness."""
+  if history_frames < 1:
+    raise ValueError("history_frames must be at least one")
+  if history_stride < 1:
+    raise ValueError("history_stride must be at least one")
+  cfg = unitree_g1_flat_3dgs_depth_validity_env_cfg(play=play)
+  camera = cfg.observations["camera"]
+  camera.terms = {
+    "depth_validity": ObservationTermCfg(
+      func=camera_depth_validity_robust,
+      params={
+        "sensor_name": G1_3DGS_DEPTH_SENSOR,
+        "cutoff_distance": 5.0,
+        "min_depth": 0.05,
+        "update_period": 2,
+        "enable_corruption": not play,
+        "range_noise_std": 0.01,
+        "blur_kernel_size": 3,
+        "structured_dropout_prob": 0.1,
+        "frame_dropout_prob": 0.02,
+        "dropout_size_range": (0.1, 0.3),
+      },
+      delay_min_lag=1,
+      delay_max_lag=1,
+    )
+  }
+  camera.history_length = 1 + (history_frames - 1) * history_stride
+  camera.flatten_history_dim = False
+  camera.concatenate_dim = 1
+  camera.enable_corruption = False
   return cfg

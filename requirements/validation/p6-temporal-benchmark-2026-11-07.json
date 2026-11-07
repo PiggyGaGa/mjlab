@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-07",
+  "device": "NVIDIA GeForce RTX 3060 12 GiB",
+  "seed": 42,
+  "steps": 12,
+  "iterations": 1,
+  "scope": "Short pipeline benchmark; not convergence or statistically stable performance",
+  "runs": [
+    {
+      "mode": "single-frame-depth",
+      "num_envs": 1,
+      "actor_parameters": 257018,
+      "actor_ms_per_batch": 0.36875523859634995,
+      "actor_observations_per_second": 2711.8258815968406,
+      "rollout_environment_steps_per_second": 31.11833096825274,
+      "update_seconds": 0.42403362691402435,
+      "peak_torch_allocated_bytes": 36178432,
+      "source_report_sha256": "02a02ee26845acfa1b39cf5f73d779dcc56dcb024379679cbc272477dde91cf1"
+    },
+    {
+      "mode": "robust-strided-depth-validity",
+      "num_envs": 1,
+      "actor_parameters": 259818,
+      "actor_ms_per_batch": 0.39699509972706437,
+      "actor_observations_per_second": 2518.922779368067,
+      "rollout_environment_steps_per_second": 15.698111704720912,
+      "update_seconds": 0.3914366071112454,
+      "peak_torch_allocated_bytes": 41426944,
+      "source_report_sha256": "86ea4a2b6b57ac9a3acfe1bfee7f9d22c00c64fcc0f5b6269af3aef653f623f3"
+    },
+    {
+      "mode": "single-frame-depth",
+      "num_envs": 4,
+      "actor_parameters": 257018,
+      "actor_ms_per_batch": 0.3453739685937762,
+      "actor_observations_per_second": 11581.648774186398,
+      "rollout_environment_steps_per_second": 41.829795131432554,
+      "update_seconds": 0.3850430438760668,
+      "peak_torch_allocated_bytes": 39646208,
+      "source_report_sha256": "f21e50e79230180d1d1252edc9b46777c0fed3928b461fc9f48ff47a327a0a55"
+    },
+    {
+      "mode": "robust-strided-depth-validity",
+      "num_envs": 4,
+      "actor_parameters": 259818,
+      "actor_ms_per_batch": 0.39453656878322363,
+      "actor_observations_per_second": 10138.477181814247,
+      "rollout_environment_steps_per_second": 37.015940696352935,
+      "update_seconds": 0.36047249916009605,
+      "peak_torch_allocated_bytes": 64616448,
+      "source_report_sha256": "ee9f3728b4b35db2b2e4f2834076e985e17faf512192a314d2c5d8974d843764"
+    }
+  ]
+}

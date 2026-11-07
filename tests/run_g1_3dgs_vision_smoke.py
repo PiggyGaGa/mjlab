@@ -31,6 +31,9 @@ from mjlab.utils.torch import configure_torch_backends
 
 _TASK = "Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth"
 _VALIDITY_TASK = _TASK + "-Validity"
+_HISTORY_TASK = _VALIDITY_TASK + "-History"
+_ROBUST_TASK = _HISTORY_TASK + "-Robust"
+_ASYMMETRIC_TASK = _ROBUST_TASK + "-Asymmetric"
 
 
 def camera_tensor(obs: TensorDict) -> torch.Tensor:
@@ -39,20 +42,53 @@ def camera_tensor(obs: TensorDict) -> torch.Tensor:
   return depth
 
 
-def check_depth(depth: torch.Tensor, num_envs: int, channels: int = 1) -> None:
-  assert depth.shape == (num_envs, channels, 48, 64)
+def latest_camera_frame(camera: torch.Tensor) -> torch.Tensor:
+  if camera.ndim == 5:
+    return camera[:, -1]
+  return camera
+
+
+def check_depth(
+  depth: torch.Tensor,
+  num_envs: int,
+  channels: int = 1,
+  history_length: int = 0,
+) -> None:
+  expected = (
+    (num_envs, history_length, channels, 48, 64)
+    if history_length > 0
+    else (num_envs, channels, 48, 64)
+  )
+  assert depth.shape == expected
   assert depth.dtype == torch.float32
   assert torch.isfinite(depth).all()
   assert ((depth >= 0) & (depth <= 1)).all()
-  image = depth[:, :1].flatten(1)
-  assert (image.amax(1) > image.amin(1)).all()
+  latest = latest_camera_frame(depth)
   if channels == 2:
-    assert ((depth[:, 1] == 0) | (depth[:, 1] == 1)).all()
+    assert ((latest[:, 1] == 0) | (latest[:, 1] == 1)).all()
+
+
+def raw_depth_tensor(env: ManagerBasedRlEnv) -> torch.Tensor:
+  sensor = env.scene[G1_3DGS_DEPTH_SENSOR]
+  assert isinstance(sensor, CameraSensor)
+  raw = sensor.data.depth
+  assert raw is not None
+  return raw
+
+
+def check_raw_depth_signal(env: ManagerBasedRlEnv) -> None:
+  raw = raw_depth_tensor(env)
+  assert torch.isfinite(raw).all()
+  flattened = raw.flatten(1)
+  assert (flattened.amax(1) > flattened.amin(1)).all(), (
+    "Raw renderer depth is spatially constant"
+  )
 
 
 def save_depth(depth: torch.Tensor, output: Path, label: str) -> None:
-  arrays = depth.detach().cpu().numpy()
-  np.save(output / f"{label}.npy", arrays)
+  full_arrays = depth.detach().cpu().numpy()
+  np.save(output / f"{label}.npy", full_arrays)
+  arrays = latest_camera_frame(depth).detach().cpu().numpy()
   for index, frame in enumerate(arrays[:, 0]):
     # Fixed 0..5m normalization; white is far, black is near.
     Image.fromarray((frame * 255).astype(np.uint8)).save(
@@ -65,10 +101,7 @@ def save_depth(depth: torch.Tensor, output: Path, label: str) -> None:
 
 
 def sample_raw_depth(env: ManagerBasedRlEnv, phase: str, dones: torch.Tensor) -> dict:
-  sensor = env.scene[G1_3DGS_DEPTH_SENSOR]
-  assert isinstance(sensor, CameraSensor)
-  raw = sensor.data.depth
-  assert raw is not None
+  raw = raw_depth_tensor(env)
   values = raw.detach().cpu().numpy().reshape(env.num_envs, -1)
   assert np.isfinite(values).all()
   return {
@@ -83,9 +116,19 @@ def sample_raw_depth(env: ManagerBasedRlEnv, phase: str, dones: torch.Tensor) ->
 
 def run(args: argparse.Namespace, report: dict) -> None:
   configure_torch_backends()
-  task = _VALIDITY_TASK if args.validity_mask else _TASK
-  channels = 2 if args.validity_mask else 1
+  if args.asymmetric_critic:
+    task = _ASYMMETRIC_TASK
+  elif args.robust_history:
+    task = _ROBUST_TASK
+  elif args.temporal_history:
+    task = _HISTORY_TASK
+  elif args.validity_mask:
+    task = _VALIDITY_TASK
+  else:
+    task = _TASK
+  channels = 1 if task == _TASK else 2
   cfg = load_env_cfg(task)
+  history_length = cfg.observations["camera"].history_length or 0
   cfg.scene.num_envs = args.num_envs
   cfg.seed = args.seed
   if args.scene_manifest is not None:
@@ -112,7 +155,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
     report["cuda_graph_enabled"] = env.sim.use_cuda_graph
     wrapped = RslRlVecEnvWrapper(env, clip_actions=agent.clip_actions)
     obs = wrapped.get_observations()
-    check_depth(camera_tensor(obs), args.num_envs, channels)
+    check_raw_depth_signal(env)
+    check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
     save_depth(camera_tensor(obs), args.output, "reset")
     report["observation_shapes"] = {k: list(v.shape) for k, v in obs.items()}
     if args.num_envs > 1:
@@ -124,9 +168,29 @@ def run(args: argparse.Namespace, report: dict) -> None:
       torch.testing.assert_close(after["camera"][1:], before_depth, rtol=0, atol=0)
       report["partial_reset_other_world_state_and_depth"] = "passed"
       obs = after
+    previous_raw = raw_depth_tensor(env).clone()
     runner = MjlabOnPolicyRunner(wrapped, asdict(agent), device=args.device)
     actor = runner.alg.get_policy()
     report["actor_parameter_count"] = sum(p.numel() for p in actor.parameters())
+    runner.alg.eval_mode()
+    with torch.inference_mode():
+      for _ in range(10):
+        actor(obs)
+      if torch.cuda.is_available():
+        torch.cuda.synchronize()
+      inference_started = time.perf_counter()
+      for _ in range(100):
+        actor(obs)
+      if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    inference_seconds = time.perf_counter() - inference_started
+    report["actor_inference"] = {
+      "batches": 100,
+      "batch_size": args.num_envs,
+      "total_seconds": inference_seconds,
+      "milliseconds_per_batch": inference_seconds * 10.0,
+      "environment_observations_per_second": 100 * args.num_envs / inference_seconds,
+    }
     cnn_before = {
       name: p.detach().clone()
       for name, p in actor.named_parameters()
@@ -135,11 +199,15 @@ def run(args: argparse.Namespace, report: dict) -> None:
     assert cnn_before, "Actor has no CNN parameters"
     loss_history = []
     deltas = []
+    raw_deltas = []
     depth_samples = []
     previous = obs["camera"].clone()
+    rollout_seconds = 0.0
+    update_seconds = 0.0
     started = time.perf_counter()
     for iteration in range(args.iterations):
       runner.alg.train_mode()
+      rollout_started = time.perf_counter()
       with torch.inference_mode():
         for step in range(args.steps):
           actions = runner.alg.act(obs)
@@ -149,21 +217,40 @@ def run(args: argparse.Namespace, report: dict) -> None:
           if args.depth_metrics:
             depth_samples.append(sample_raw_depth(env, "training", dones))
           assert torch.isfinite(rewards).all()
-          check_depth(camera_tensor(obs), args.num_envs, channels)
+          check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
           deltas.append(float((obs["camera"] - previous).abs().max()))
+          raw = raw_depth_tensor(env)
+          raw_deltas.append(float((raw - previous_raw).abs().max()))
           previous = obs["camera"].clone()
+          previous_raw = raw.clone()
           runner.alg.process_env_step(obs, rewards, dones, extras)
           if step in (0, args.steps - 1):
             save_depth(camera_tensor(obs), args.output, f"iter{iteration}-step{step}")
         runner.alg.compute_returns(obs)
+      if torch.cuda.is_available():
+        torch.cuda.synchronize()
+      rollout_seconds += time.perf_counter() - rollout_started
+      update_started = time.perf_counter()
       losses = runner.alg.update()
+      if torch.cuda.is_available():
+        torch.cuda.synchronize()
+      update_seconds += time.perf_counter() - update_started
       assert all(math.isfinite(float(value)) for value in losses.values())
       loss_history.append(losses)
       runner.current_learning_iteration = iteration + 1
     report["rollout_and_update_seconds"] = time.perf_counter() - started
+    report["rollout_seconds"] = rollout_seconds
+    report["update_seconds"] = update_seconds
+    report["rollout_environment_steps_per_second"] = (
+      args.num_envs * args.steps * args.iterations / rollout_seconds
+    )
     report["loss_history"] = loss_history
     report["depth_frame_max_abs_deltas"] = deltas
+    report["raw_depth_frame_max_abs_deltas"] = raw_deltas
     assert any(delta > 1e-5 for delta in deltas), "Depth appears frozen"
+    assert any(delta > 1e-5 for delta in raw_deltas), (
+      "Raw renderer depth appears frozen"
+    )
     report["actor_cnn_parameter_max_abs_change"] = max(
       float((p.detach() - cnn_before[name]).abs().max())
       for name, p in actor.named_parameters()
@@ -183,11 +270,14 @@ def run(args: argparse.Namespace, report: dict) -> None:
       sensitivity = float((actor(altered) - expected).abs().max())
     report["camera_zeroing_action_max_abs_delta"] = sensitivity
     assert sensitivity > 0, "Actor ignores camera tensor structurally"
-    if args.validity_mask:
+    if channels == 2:
       with torch.no_grad():
         altered = obs.clone()
         camera = camera_tensor(obs).clone()
-        camera[:, 1] = 1 - camera[:, 1]
+        if camera.ndim == 5:
+          camera[:, :, 1] = 1 - camera[:, :, 1]
+        else:
+          camera[:, 1] = 1 - camera[:, 1]
         altered["camera"] = camera
         mask_sensitivity = float((actor(altered) - expected).abs().max())
       report["validity_flipping_action_max_abs_delta"] = mask_sensitivity
@@ -224,7 +314,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
         obs, rewards, dones, extras = wrapped.step(actions)
         if args.depth_metrics:
           depth_samples.append(sample_raw_depth(env, "resumed", dones))
-        check_depth(camera_tensor(obs), args.num_envs, channels)
+        check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
         assert torch.isfinite(rewards).all()
         restored.alg.process_env_step(obs, rewards, dones, extras)
       restored.alg.compute_returns(obs)
@@ -275,7 +365,11 @@ def main() -> None:
   parser.add_argument("--iterations", type=int, default=2)
   parser.add_argument("--seed", type=int, default=42)
   parser.add_argument("--depth-metrics", action="store_true")
-  parser.add_argument("--validity-mask", action="store_true")
+  modes = parser.add_mutually_exclusive_group()
+  modes.add_argument("--validity-mask", action="store_true")
+  modes.add_argument("--temporal-history", action="store_true")
+  modes.add_argument("--robust-history", action="store_true")
+  modes.add_argument("--asymmetric-critic", action="store_true")
   parser.add_argument("--scene-manifest", type=Path)
   parser.add_argument("--device", default="cuda:0")
   parser.add_argument("--output", type=Path, default=Path("/tmp/p6-vision-smoke"))
@@ -285,10 +379,26 @@ def main() -> None:
   args.output.mkdir(parents=True, exist_ok=True)
   report = {
     "date": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
-    "task": _VALIDITY_TASK if args.validity_mask else _TASK,
-    "camera_encoding": "depth+finite-positive-validity-v1"
-    if args.validity_mask
-    else "depth-zero-as-far-v1",
+    "task": (
+      _ASYMMETRIC_TASK
+      if args.asymmetric_critic
+      else _ROBUST_TASK
+      if args.robust_history
+      else _HISTORY_TASK
+      if args.temporal_history
+      else _VALIDITY_TASK
+      if args.validity_mask
+      else _TASK
+    ),
+    "camera_encoding": (
+      "strided-depth+finite-positive-validity-robust-v1"
+      if args.robust_history or args.asymmetric_critic
+      else "temporal-depth+finite-positive-validity-v1"
+      if args.temporal_history
+      else "depth+finite-positive-validity-v1"
+      if args.validity_mask
+      else "depth-zero-as-far-v1"
+    ),
     "mujoco": version("mujoco"),
     "rsl_rl": version("rsl-rl-lib"),
     "arguments": {

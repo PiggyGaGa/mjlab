@@ -2416,7 +2416,7 @@ dependencies = [
     { name = "websockets" },
 ]
 wheels = [
-    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:77db88da50749a4dd1bbec3d553180fdcd0424caeeded63c5f8252dd227f42d1" },
+    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:51a21b6fe480184fe1e5f02d58e5ca9dedf1e7a710d28c8253fa12928e352b0d" },
 ]
 
 [package.metadata]
@@ -2458,7 +2458,7 @@ dependencies = [
     { name = "websockets" },
 ]
 wheels = [
-    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:6a8bcd207e2c2e25e10fe627c962e41603c6a661d92417adbec2a42169a2004c" },
+    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:db9d044ef70475cc85e314ee0531eb17485bca15ffbb1f4bedc4e59088ccf838" },
 ]
 
 [package.metadata]

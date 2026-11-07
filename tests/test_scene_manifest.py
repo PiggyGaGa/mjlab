@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import mujoco
 import pytest
 
 from mjlab.scene import (
@@ -113,6 +114,20 @@ def test_apply_scene_manifest_uses_one_transform_for_visual_and_collision(
   assert scene_cfg.spawn_quaternion_wxyz == (1.0, 0.0, 0.0, 0.0)
 
 
+def test_scene_manifest_can_preserve_authored_geom_groups(tmp_path: Path) -> None:
+  path = _write_manifest_bundle(tmp_path)
+  data = json.loads(path.read_text())
+  data["collision"]["geom_group"] = None
+  path.write_text(json.dumps(data))
+  scene_cfg = SceneCfg()
+
+  manifest = apply_scene_manifest(scene_cfg, path)
+
+  assert manifest.collision.geom_group is None
+  assert scene_cfg.terrain is not None
+  assert scene_cfg.terrain.mjcf_geom_group is None
+
+
 def test_scene_manifest_requires_every_mjcf_dependency(tmp_path: Path) -> None:
   path = _write_manifest_bundle(tmp_path)
   data = json.loads(path.read_text())
@@ -216,3 +231,14 @@ def test_room1_scene_manifest_is_current() -> None:
   assert manifest.schema_version == 1
   assert manifest.visual.path.name == "point_cloud_2_transform.ply"
   assert manifest.collision.path.name == "collision.xml"
+  assert manifest.collision.geom_group is None
+
+  spec = mujoco.MjSpec.from_file(str(manifest.collision.path))
+  geoms = {geom.name: geom for geom in spec.geoms}
+  assert geoms["ground"].group == 3
+  for index in range(6):
+    pillar = geoms[f"pillar_{index:02d}"]
+    assert pillar.group == 1
+    assert pillar.rgba[3] == 1.0
+    assert pillar.contype != 0
+    assert pillar.conaffinity != 0

@@ -1,6 +1,6 @@
 # P6 视觉训练方法、论文来源与复现说明
 
-更新日期：2026-10-30。P6 是工程基线：将仓库已有 YAM Vision 路径迁移到
+更新日期：2026-11-07。P6 是工程基线：将仓库已有 YAM Vision 路径迁移到
 G1 3DGS depth locomotion；不把以下已有算法或编码器作为本项目原创贡献。
 
 ## 1. 方法与来源的对应关系
@@ -27,6 +27,8 @@ YAM Vision 在本项目中指仓库已有的任务配置与模型实现，不指
 - 复用起点：`src/mjlab/tasks/manipulation/config/yam/rl_cfg.py` 中
   `yam_lift_cube_vision_ppo_runner_cfg`。
 - Spatial softmax 模型：`src/mjlab/rl/spatial_softmax.py`。
+- 时序模型薄适配层：`src/mjlab/rl/temporal_spatial_softmax.py`；历史缓冲
+  直接复用 `ObservationManager`，未另建项目专用 buffer。
 - Depth observation：`src/mjlab/envs/mdp/observations.py` 中 `camera_depth`。
 - Runner/检查点：`src/mjlab/rl/runner.py`，继承 RSL-RL OnPolicyRunner。
 
@@ -82,6 +84,23 @@ Softmax 算法，也不引入额外渲染。单通道任务保留独立 task/exp
 两种编码的首层卷积不同，checkpoint 不直接兼容；详见
 `validation/p6-validity-2026-10-31.md`。初步测试只证明可用性区分与训练
 连通性，不能用于宣称视觉任务收益。
+
+独立时序任务
+`Mjlab-Velocity-Flat-Unitree-G1-3DGS-Depth-Validity-History` 保留连续四帧，
+camera shape 为 `(B,4,2,48,64)`，历史顺序为从旧到新。reset 后由仓库现有
+history buffer 用首帧回填，避免把全零伪历史暴露给策略。RSL-RL 的 2D CNN
+接口只接受 `(B,C,H,W)`，因此薄适配层仅在 encoder 边界把 `(T,C)` 合为
+8 个输入通道，后续 Spatial Softmax、MLP 和 PPO 配置不变。该实现是固定
+四帧的首个工程基线，尚未实现 stride、延迟或噪声，也没有证明时序输入
+改善避障表现。
+
+robust 对照保存七个连续控制步，并由 encoder adapter 以 stride 2 选择
+`(t-6,t-4,t-2,t)` 四帧。任务复用主线 observation delay/history，固定增加
+一个控制步延迟；项目专用组合 observation term 以两控制步周期
+sample-and-hold，并在同一 depth+validity 张量上执行量程噪声、3×3 blur、
+随机矩形缺失和整帧 dropout，保证缺失像素仍为 `(1,0)`。随机 corruption
+在 play 配置关闭。另有 asymmetric 对照让 actor 读取 camera、critic 只读
+109 维特权状态。以上均是鲁棒性接口和消融入口，不是效果结论。
 
 PPO clipped objective 使用 ratio r=pi_new(a|o)/pi_old(a|o)：
 

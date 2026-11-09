@@ -1,6 +1,7 @@
 # mjlab 3DGS 机器人训练相关工作调研报告
 
-**专题更新：2026-11-07。** P8 的语义引导碰撞简化调研见
+**专题更新：2026-11-09。** P7 的相关项目对比和选型见第 6.4 节；P8 的
+语义引导碰撞简化调研见
 [专题报告](mjlab-3dgs-p8-semantic-collision-research.md)与
 [参考文献 BibTeX](mjlab-3dgs-p8-references.bib)。本报告第 13 节汇总新的
 方法选择；下文 2026-10-24 的初轮调研保留其历史范围。
@@ -499,11 +500,11 @@ ground-truth mesh，而不仅是展示若干成功案例。
 
 该部分适合作为系统贡献或实验贡献，不建议单独作为论文唯一创新。
 
-### 6.4 当前主线：3DGS 目标条件视觉避障
+### 6.4 当前主线：3DGS 安全感知速度跟踪
 
-**2026-11-07 按用户方向更新。** 本项目先以真实重建场景中的目标条件
-视觉避障为主线，在 mjlab + MuJoCo Warp 上建立训练与泛化基线；单台阶、
-楼梯和复杂地形转为后续扩展。
+**2026-11-09 按传感器约束更新。** 本项目先以真实重建场景中的安全感知
+速度跟踪为主线，在 mjlab + MuJoCo Warp 上建立训练与泛化基线；不把没有
+定位传感器的 G1 定义成世界坐标导航，单台阶、楼梯和复杂地形转为后续扩展。
 
 GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真、训练像素策略，
 官方还提供目标到达/追踪类任务。作者描述的视觉策略使用 DINOv2 特征、
@@ -520,17 +521,75 @@ GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真�
 [官方任务](https://github.com/project-instinct/InstinctLab/tree/main/source/instinctlab/instinctlab/tasks/parkour)。
 
 拟议首个任务是：G1 在具有平坦支撑面、墙体和少量障碍的 3DGS 场景中，
-从随机起点到达随机目标；对可绕行障碍转向，对封路障碍减速并在安全距离外
-停车。保留现有关节目标控制及 PPO 链路；actor 读取目标方位/距离、本体状态与
-时序 depth+validity，障碍地图/最短路径仅供评估或特权对照。先使用人工
-校验碰撞，再替换 P8 自动代理。RGB 保留为后续对照。
+无障碍时跟踪 velocity command；前方受阻时减速或停车，必要时原地旋转
+搜索安全方向，然后恢复速度跟踪；没有安全出口时稳定站立。保留现有关节
+目标控制、``UniformVelocityCommand`` 及 PPO 链路；actor 读取速度命令、
+本体状态与时序 depth+validity，不读取世界位置、目标位置、地图、碰撞真值
+或安全出口标签。先使用已校验 apartment 碰撞，再替换 P8 泛化代理。
 
-验收需有相同预算的 blind、privileged、mesh vision 与 3DGS vision。通过
-关闭/冻结/错配图像、改变障碍布局及未见场景测试排查记忆或目标向量
-捷径，报告到达率、碰撞/跌倒率、停车成功率、首次发现后停车距离、最小
-障碍间距、不必要停车率、路径效率与端到端训练吞吐。safety shield 开/关
-分开报告，不把硬停车的成功归因于策略学习。
+验收需有相同预算的 blind、deterministic depth adapter、privileged、
+mesh vision 与 3DGS vision。通过关闭/冻结/错配图像和留出障碍布局排查
+盲策略捷径，报告 free-space 跟踪误差、碰撞/跌倒率、制动距离、停止净空、
+安全侧选择、搜索/恢复成功率、不必要停车/旋转与训练吞吐；不报告目标到达率、
+路径效率或 SPL。safety shield 开/关分开报告。
 “改用 mjlab”是系统实现选择；论文贡献仍需依靠可复现实验确立。
+
+#### 相关项目对比与 P7 选型
+
+截至 2026-11-09，没有一个公开项目同时覆盖 G1、前向深度、无定位安全速度
+跟踪、原地旋转搜索、关节目标控制和 3DGS 仿真。P7 不应声称直接复现某个
+单一项目，而应按任务、安全机制、机器人控制和仿真环境分别选择参考。
+
+**Agile But Safe（ABS）是任务目标和安全机制最接近的项目。** 它把敏捷
+locomotion policy、recovery policy 和 learned reach-avoid value function
+组合起来，在静态和动态障碍中进行速度运动与碰撞恢复。它对 P7 的主要价值是
+“正常跟踪—风险判断—恢复动作—返回正常运动”的安全分层，以及将任务策略和
+安全恢复分别评估的实验思路。但 ABS 使用四足平台和不同的外感知表示，也没有
+定义 P7 所需的“前向深度受阻后原地旋转，通过连续观测寻找安全扇区”。因此
+P7 参考其安全架构和评测逻辑，不复制其机器人、传感器或训练代码。
+[论文](https://arxiv.org/abs/2401.17583)、
+[官方代码](https://github.com/LeCAR-Lab/ABS)。
+
+**Hiking in the Wild 是机器人和低层感知控制最接近的项目。** 它使用 G1、
+深度视觉、本体状态、PPO 和 29 维关节目标，适合参考时序深度编码、传感噪声、
+延迟和感知到关节动作的接口。不过其任务核心是复杂地形穿越与安全落脚，而不是
+墙体或柱体前的制动、绕行和无出口站立。P7 复用其 G1 感知运动设计思想，不把
+地形穿越结果当作平面碰撞规避证据。
+
+**Omni-Perception 的任务表述与 P7 高度相关。** 它将速度命令跟踪与反应式
+全向避碰统一到端到端 legged locomotion policy 中，证明二者可以作为同一个
+闭环任务训练。主要差异是它使用时序 LiDAR，能够直接观察多方向威胁；P7 只有
+前向深度，因此必须显式评价停车后旋转搜索的必要性、搜索时间和恢复成功率。
+[论文](https://arxiv.org/abs/2505.19214)。
+
+其他相关项目只覆盖局部能力：
+
+- **ViNL** 使用第一视角深度执行速度命令，是 depth-conditioned locomotion
+  的重要基线；但其高层视觉导航器仍面向目标导航，而且使用四足平台。
+  [论文](https://arxiv.org/abs/2210.14791)。
+- **Perceptive Humanoid Parkour** 使用 G1、机载深度和二维速度命令，机器人与
+  传感配置接近；但策略选择跨越、攀爬、翻越等技能，而不是对不可通行障碍停车
+  和绕行。[论文](https://arxiv.org/abs/2602.15827)。
+- **LP-NavOA** 的局部规划器可覆盖机器人中心的 heading-speed command 并绕过
+  障碍，对“安全方向覆盖 nominal command”有参考价值；但它依赖目标方向和
+  raycast，属于导航任务，不能成为 P7 的 actor observation 定义。
+  [论文](https://arxiv.org/abs/2606.23249)。
+- **GaussGym** 最接近 P7 的 3DGS 视觉仿真与像素策略训练条件，但公开任务偏向
+  目标追踪/到达，不能替代无定位安全速度跟踪协议。
+
+因此，P7 采用以下组合，而不是选择一个项目整体迁移：
+
+1. 任务和安全恢复框架以 ABS 为首要参考；
+2. G1、时序深度和关节目标接口以 Hiking in the Wild 为首要参考；
+3. 速度跟踪与反应式避碰的统一训练参考 Omni-Perception；
+4. 3DGS 场景、视觉/碰撞分离和仿真对照参考 GaussGym；
+5. “制动—停车—旋转搜索—最大安全扇区—恢复跟踪”作为 P7 自有规则基线，
+   不声称来自上述项目，也不把它预设为最终学习策略结构。
+
+这个选型保持 P7 的边界：它是 localization-free safe perceptive velocity
+tracking，不是 PointGoal navigation、全局规划或 parkour。ABS 的 recovery
+policy、LP-NavOA 的 heading override 等机制只有在不向 actor 泄漏位姿、目标
+方向、碰撞真值或全向传感信息时，才可转化为 P7 基线。
 
 #### 后续课程：真实重建地形上的接触丰富运动
 
@@ -573,7 +632,7 @@ GaussGym 的参考价值是将真实场景视觉表示接入并行物理仿真�
 | 结构化地形 locomotion | 直接放大高度、法线、边缘和孔洞误差；符合静态场景范围 | 需要准备 ground-truth/高质量参考几何 | 后续接触敏感主实验 |
 | 高动态 parkour | 展示效果强，对接触和几何敏感 | 控制难度、动力学和几何误差严重混杂；GaussGym 已覆盖类似展示 | 最终 stress test，不作为唯一主任务 |
 | 机器人 manipulation | 接触精度敏感，适合研究可操作表面 | 通常需要动态对象、质量、摩擦、抓取和实例分割，超出当前静态 PLY 范围 | 后续扩展或第二篇工作 |
-| G1 目标条件视觉避障 | 复用现有控制与原生视觉链路，可测减速、停车、绕障与泛化 | 需排除盲策略捷径和场景记忆；学习策略不提供硬安全保证 | 当前首个闭环 |
+| G1 安全感知速度跟踪 | 不依赖定位，复用现有速度命令与视觉链路，可测制动、搜索和恢复 | 需防止永久停车/旋转等捷径；学习策略不提供硬安全保证 | 当前首个闭环 |
 
 Parkour 可以作为论文视频和极限测试，例如跨越间隙、跳上台阶或连续踏石，但不应
 成为唯一证据。若 parkour 策略失败，很难判断原因来自碰撞代理、reward、动作空间、
@@ -706,6 +765,11 @@ MJWarp 原生 render context 接入，适合作为工程 Phase 1；它建立了�
 - [MuJoCo Warp 3DGS 官方文档](https://mujoco.readthedocs.io/en/latest/mjwarp/#d-gaussian-splatting-3dgs)
 - [GaussGym 论文](https://arxiv.org/abs/2510.15352)、[项目页](https://www.escontrela.me/gauss_gym/)、[代码](https://github.com/escontra/gauss_gym)
 - [Hiking in the Wild 论文](https://arxiv.org/abs/2601.07718)、[项目页](https://project-instinct.github.io/hiking-in-the-wild/)、[代码](https://github.com/project-instinct/InstinctLab)
+- [Agile But Safe 论文](https://arxiv.org/abs/2401.17583)、[代码](https://github.com/LeCAR-Lab/ABS)
+- [Omni-Perception 论文](https://arxiv.org/abs/2505.19214)
+- [ViNL 论文](https://arxiv.org/abs/2210.14791)
+- [Perceptive Humanoid Parkour 论文](https://arxiv.org/abs/2602.15827)
+- [LP-NavOA 论文](https://arxiv.org/abs/2606.23249)
 - [MuGS 代码与文档](https://github.com/Renforce-Dynamics/MuGS)
 - [DISCOVERSE 论文](https://arxiv.org/abs/2507.21981)、[项目页](https://air-discoverse.github.io/)、[代码](https://github.com/discoverse-dev/DISCOVERSE)
 - [SplatGym 论文](https://arxiv.org/abs/2410.19564)、[代码](https://github.com/SplatLearn/SplatGym)

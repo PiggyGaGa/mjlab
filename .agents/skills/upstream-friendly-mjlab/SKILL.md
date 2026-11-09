@@ -3,9 +3,10 @@ name: upstream-friendly-mjlab
 description: >-
   Plan and implement mjlab code, task, sensor, training, or API changes that must
   reuse upstream capabilities where possible and remain easy to rebase and
-  contribute. Use before editing runtime code or shared interfaces, especially for
-  project-specific 3DGS work that should preserve upstream defaults and minimize
-  conflicts with the local main branch.
+  contribute while keeping project requirements synchronized. Use before editing
+  runtime code or shared interfaces, especially for project-specific 3DGS work that
+  should preserve upstream defaults and minimize conflicts with the local main
+  branch.
 ---
 
 # Upstream-friendly mjlab development
@@ -68,15 +69,40 @@ defaults. Ask for direction before a broad compatibility change.
 - Update user-facing docs and changelog only for behavior that actually exists. Keep
   research plans and unimplemented milestones clearly labeled as plans.
 
+## Keep requirements synchronized
+
+Every change to implementation code, tests, executable scripts, schemas, or
+behavior-bearing configuration/assets must update the relevant file under
+`requirements/` in the same task. This is a completion requirement, not an optional
+documentation follow-up.
+
+- Before editing, identify the requirement, milestone, or TODO section that owns the
+  behavior. If none exists, add a narrowly scoped entry before treating the code as
+  complete.
+- Record what was implemented, what was verified, and what remains. Mark an item
+  complete only when its stated acceptance evidence exists.
+- Keep project-level status tables, detailed checklists, validation evidence, and
+  dated update records mutually consistent when the selected requirements document
+  uses those sections.
+- Do not describe planned behavior as implemented, and do not silently broaden a
+  requirement to match an incomplete implementation.
+- Before handoff, inspect the changed paths. If code or behavior-bearing files
+  changed but no corresponding `requirements/` file changed, the task is incomplete.
+
+Documentation-only work that does not change code or behavior may update
+`requirements/` only when it changes project scope, status, evidence, or a technical
+decision.
+
 ## Verify and hand off
 
 Use the repository's required `uv run`/Makefile checks in proportion to the change.
 Before handoff:
 
 1. Run `git diff --check` and the focused tests.
-2. Inspect the diff against both the initial worktree and `main`.
-3. List every modified shared/core file and justify why it had to change.
-4. State how existing behavior remains unchanged and identify any remaining rebase or
+2. Confirm every code or behavior change has its matching `requirements/` update.
+3. Inspect the diff against both the initial worktree and `main`.
+4. List every modified shared/core file and justify why it had to change.
+5. State how existing behavior remains unchanged and identify any remaining rebase or
    upstream-compatibility risk.
 
 Do not claim upstream readiness merely because tests pass. A contribution-ready

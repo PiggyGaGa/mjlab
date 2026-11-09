@@ -128,8 +128,8 @@ learning rate=1e-3，adaptive schedule、desired KL=0.01，gradient norm
 > collision geometry governs physical contacts.
 
 以上是基线方法描述，仍需配合实验配置和引用；不能写成已经证明优于 blind
-policy。视觉收益需要 P7 的 blind/privileged/mesh-depth/3DGS-depth 对照，
-以及冻结帧、遮挡或关闭相机的消融。
+policy。视觉收益需要 P7 的 blind/deterministic adapter/privileged/
+mesh-depth/3DGS-depth 对照，以及冻结帧、遮挡或关闭相机的消融。
 
 ## 5. P6 smoke 复现入口
 

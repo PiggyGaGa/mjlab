@@ -116,9 +116,10 @@ Changed
 
 - Refined the planned G1 3DGS training milestones. P6 now prepares temporal
   depth+validity observations, sensor delay/noise evaluation, and scale benchmarks.
-  P7 now targets goal-conditioned obstacle avoidance: decelerating, stopping, or
-  turning around impassable obstacles while reaching a goal without collision or
-  falling, with a separately evaluated braking/TTC safety shield.
+  P7 now targets localization-free safe perceptive velocity tracking: following
+  velocity commands in free space, braking at frontal obstacles, rotating in place
+  to find a safe direction, and resuming motion, with a separately evaluated
+  braking/TTC safety shield.
 
 - Linux x86_64 Python 3.12/3.13 uv environments now use the custom MuJoCo
   3DGS wheels from the fork's v1.0 GitHub Release instead of a local wheel path.

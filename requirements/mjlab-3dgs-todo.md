@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-11-07
+最后更新：2026-11-09
 
 ## 0. 项目总览
 
@@ -10,13 +10,13 @@
 |---|---|---|---|
 | P0 | 需求与调研 | 第一轮完成 | 持续补充论文材料 |
 | P1 | 3DGS 资产导入 | 基础完成 | 资源上限与导入优化 |
-| P2 | MJWarp 原生渲染 | 基础完成 | 训练性能与深度验证 |
+| P2 | MJWarp 原生渲染 | 基础完成 | 高分辨率吞吐、孔洞与遮挡边界验证 |
 | P3 | Play 前端（Viser/外部 viewer） | **完成（按当前范围收口）** | 新版 wheel 后续发布；增强验证转为后续加固 |
-| P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 后续由 P8 生成碰撞资产 |
-| P5 | 统一场景资产 | **完成** | 进入 P6 视觉训练 |
+| P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 接收 P8 后续泛化资产作替换对照 |
+| P5 | 统一场景资产 | **完成** | 为 P7/P8 提供稳定场景契约 |
 | P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
-| P7 | 3DGS 目标条件视觉避障 | 未开始；台阶任务后移 | 减速/停车/转向、无碰撞目标到达与视觉依赖验收 |
-| P8 | 自动碰撞生成 | 首轮语义简化专题调研完成；实现未开始 | 有限平面/box 基线、可替换语义前端与合规资产导出 |
+| P7 | 3DGS 安全感知速度跟踪 | 准备中；MDP 未开始，apartment 基线资产已具备 | 冻结局部障碍场景与安全速度跟踪协议 |
+| P8 | 自动碰撞生成 | apartment 场景专用几何原型完成 | 泛化几何算法、可替换语义前端与质量评估 |
 | P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
 
@@ -36,10 +36,10 @@ mjlab 3DGS
 ├── 物理场景
 │   ├── P4 外部 collision-only MJCF                [MVP 完成，阶段收口]
 │   ├── P5 PLY/MJCF manifest 与统一 transform      [完成]
-│   └── P8 3DGS 自动碰撞代理生成                   [专题调研完成；待实现]
+│   └── P8 3DGS 自动碰撞代理生成                   [场景专用原型完成；待泛化]
 ├── 视觉闭环训练
 │   ├── P6 YAM Vision → G1 depth observation       [完成]
-│   ├── P7 3DGS 目标条件视觉避障               [未开始]
+│   ├── P7 3DGS 安全感知速度跟踪               [准备中；MDP 未开始]
 │   └── 单台阶、楼梯、复杂地形与间隙               [后续扩展]
 └── 质量与论文
     ├── P10 测试、文档、性能和发布                 [部分完成]
@@ -52,20 +52,22 @@ mjlab 3DGS
 P4 外部碰撞输入
   └── P5 统一视觉/碰撞资产
       ├── P6 训练视觉 observation
-      │   └── P7 视觉运动/目标到达（先用手工碰撞资产）
+      │   └── P7 安全速度跟踪（冻结 apartment 基线资产）
       └── P8 自动碰撞代理生成（与 P7 并行）
 
-P7 基线与评估接口 + P8 生成资产
+P7 安全速度跟踪基线 + P8 生成资产
   └── 手工/自动碰撞替换对照与视觉—碰撞偏差实验
 ```
 
-P7 与 P8 互不作为启动前置条件。P7 的资产制作、MDP 和 blind/privileged
-基线可在 P6 剩余验证期间先行；视觉训练依赖 P6 对应链路。P8 依赖已建立的
-P4/P5 输入契约，不等待 P6/P7 完成。两条线成熟后再联合验收，不能因为
-并行计划已确定就标记代码、训练或算法已开始/完成。
+P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前可直接冻结
+局部障碍协议并建立安全速度跟踪 MDP 与 blind/privileged 基线。P8 依赖
+已建立的 P4/P5
+输入契约，不等待 P7 完成。两条线成熟后再联合验收，不能因为并行计划已
+确定就标记代码、训练或算法已开始/完成。
 
-共享边界：P7 固定手工资产、配置与测试集作为基线；P8 输出独立版本的
-collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接口。
+共享边界：P7 固定已校验的 apartment 资产、配置与测试集作为基线；P8
+输出独立版本的 collision MJCF/mesh、manifest、内容指纹及 provenance，
+不修改训练接口。
 自动资产通过几何/接触检查后，再在相同视觉资产和评估协议下替换对照，
 不在一次训练中途静默覆盖基线资产。GPU 密集训练/重建按资源预算安排，
 任务并行不要求重负载同时占满同一张卡。
@@ -94,6 +96,7 @@ collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接
 文档为准：
 
 - `mjlab-3dgs-training.md`：训练、碰撞和视觉闭环需求；
+- `mjlab-3dgs-p7-safe-velocity.md`：P7 安全感知速度跟踪的任务与验收契约；
 - `mjlab-3dgs-play-viser.md`：独立 Play 与 Viser 需求；
 - `mjlab-3dgs-research.md`：调研范围与论文证据要求；
 - `mjlab-3dgs-research-report.md`：已有工作和第一轮调研结论。
@@ -131,6 +134,10 @@ collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接
   校验，以及 group 3 碰撞代理调试显示。
 - 已提供 room1 地面与六柱碰撞资产及基于标准 demo policy 的人工
   Play 冒烟脚本。
+- 已提供 apartment 场景专用碰撞生成脚本：将 20,468 个占据 voxel 合并为
+  89 个静态表面 box，并生成地面及两个相机可见且具碰撞的柱体，导出
+  collision-only MJCF。该脚本包含 apartment 专用范围、地面和障碍设定，
+  不代表已实现跨场景或语义碰撞生成。
 - 已提供 schema v1 scene manifest，将 PLY、collision MJCF、坐标约定、
   统一 transform 和 spawn-point metadata 绑定为一个入口；
   train/play/demo 均可加载。
@@ -145,9 +152,11 @@ collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接
   指标留作后续加固，不阻塞 P4 MVP 收口。
 - P6 已完成深度语义、动态覆盖率、1/4-world 短性能和 PPO 链路验收；尚未
   证明视觉任务增益，长训练与任务级多种子对照属于 P7/P11。
-- 尚未建立 3DGS 场景中的目标条件视觉避障任务；尚未验证
-  遇到不可通行障碍时的减速、停车或转向。单台阶、楼梯和复杂地形后移。
-- 尚未自动从 3DGS 生成碰撞代理。
+- 尚未建立 3DGS 场景中的安全感知速度跟踪任务；尚未验证遇到前方障碍时
+  的减速、停车、原地旋转搜索、安全选向和恢复跟踪。P7 不包含世界坐标导航；
+  单台阶、楼梯和复杂地形后移。
+- apartment 已有从 3DGS Gaussian 中心生成 box 碰撞代理的场景专用原型；
+  尚未形成可跨场景泛化、自动推断结构或利用语义信息的完整算法。
 - 尚未完成可选预处理缓存和正式性能基准；二者属于后期性能优化，不阻塞
   当前功能里程碑。
 
@@ -158,10 +167,12 @@ CameraSensor、标准化 depth、二维 observation group、Spatial-Softmax CNN
 和 RSL-RL；单帧、validity、时序、robust 与 asymmetric 小规模 PPO 更新及
 恢复训练链路已通过。项目主线调整为参考
 GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 MuJoCo Warp
-原生渲染。RGB 保留为后续对照。P7 先做平坦支撑面场景中的随机目标到达：机器人
-持续行走，遇到不可通行障碍时减速、停车或转向，在不碰撞、不跌倒的
-前提下到达目标。P7 可用手工资产独立建立基线，
-不等待自动生成。NPZ 缓存仍属于 P10 后期优化。
+原生渲染。RGB 保留为后续对照。P7 先做平坦支撑面场景中的安全感知速度
+跟踪：机器人在无障碍时跟踪速度命令，遇到前方障碍时减速或停车，必要时
+原地旋转搜索安全方向，然后恢复速度跟踪。P7 不依赖位置传感器、目标坐标
+或全局地图。P7 使用当前已校验的 apartment 视觉/碰撞版本建立固定
+基线，不等待 P8 泛化或语义生成算法；后续 P8 输出必须作为独立版本替换
+对照，不能在训练中途覆盖。NPZ 缓存仍属于 P10 后期优化。
 
 ## 3. 已完成工作
 
@@ -179,7 +190,13 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 - [x] 2026-10-31 调整研究主线：参考 GaussGym 的真实重建场景视觉运动/
   导航训练；首个闭环改为目标到达，增加 RGB 与 depth 对照，台阶任务后移。
 - [x] 2026-11-07 明确 P7 为 3DGS 目标条件视觉避障：不可通行障碍前
-  减速、停车或转向，并以无碰撞、不跌倒的目标到达为验收结果。
+  减速、停车或转向，并以无碰撞、不跌倒的目标到达为验收结果；该定义已于
+  2026-11-09 因无定位传感器约束被下条决策取代。
+- [x] 2026-11-09 建立 P7 独立需求基线，定义场景协议、速度命令、MDP、
+  safety shield、基线、指标、测试和分阶段验收；未将需求完成记为代码完成。
+- [x] 2026-11-09 按真实机器人无定位传感器的约束重构 P7：取消 PointGoal/
+  世界坐标导航和目标位置 observation，改为速度命令条件下的制动、停车、
+  原地旋转搜索、安全方向选择与恢复跟踪。
 
 ### B. 3DGS 资产导入
 
@@ -217,7 +234,9 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 
 仍需正式验证：
 
-- [ ] 记录 splat depth 的精确定义、遮挡边界和已知误差。
+- [x] 记录当前 splat depth 为相机轴向 Z-depth：累计 transmittance 低于
+  ``0.005`` 时写入对应 Gaussian 深度，未命中 mesh 且未达到阈值时返回零；
+  文档同时说明其不是期望/最近点深度、零值孔洞及远端映射限制。
 - [ ] 后续优化（不阻塞 P6/P7）：评估将 MuJoCo Warp 的 3DGS RGB
   合成终止阈值与 depth 表面判定阈值解耦。当前保持
   ``transmittance < 0.005`` 的既有深度语义以及 depth + validity 输入，
@@ -225,7 +244,8 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
   可选参数，并构建、锁定独立 wheel；同时比较孔洞率、漂浮点误检、
   RGB/depth 对齐、渲染吞吐及已有 checkpoint 的观测分布变化。
 - [ ] 验证不同相机数量、分辨率和更新频率下的显存及吞吐。
-- [ ] 验证视觉训练路径的 CUDA graph 行为。
+- [x] 当前 1/2/4-world P6 视觉 rollout 与 PPO 更新已在仿真 CUDA graph
+  启用时通过；更多相机、分辨率和更新频率组合仍归入性能矩阵。
 - [ ] 建立 segmentation 能力边界和测试。
 
 ### D. P3 Play 前端（Viser 与外部 viewer）
@@ -384,6 +404,34 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 
 ### H. 当前验证证据
 
+- [x] 2026-11-09 完成 P7 无定位安全速度跟踪 requirements 一致性检查；
+  `git diff --check` 通过，`src/` 和 `tests/` 无本轮变更。离线运行：
+
+  ```sh
+  UV_CACHE_DIR=/tmp/mjlab-uv-cache \
+    uv run --no-sync sphinx-build -j auto docs docs/_build
+  ```
+
+  Sphinx 构建成功。该证据只验证 requirements/changelog 格式与交叉口径，
+  不表示 P7 MDP、策略或训练已经实现。
+- [x] 2026-11-09 运行：
+
+  ```sh
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 UV_CACHE_DIR=/tmp/mjlab-uv-cache \
+    uv run --no-sync pytest -q \
+    tests/test_apartment_collision.py tests/test_scene_manifest.py
+  ```
+
+  `14 passed`。覆盖 apartment box 合并保持原占据 voxel、保留一米门洞、
+  空输入、manifest 无 SHA 契约、MJCF dependency 一致性，以及两个 group 1
+  柱体同时相机可见并启用碰撞。
+- [x] 2026-11-09 用户人工检查高分辨率 vision smoke 导出的 RGB/raw depth/
+  policy depth，确认柱体与 3DGS 背景的基本关系正确；同时观察到地面和周边
+  仍有 3DGS 孔洞。该结果支持诊断链路，不代表深度孔洞或 RGB/depth 阈值
+  问题已经解决。
+- [x] 2026-11-09 文档核对 MuJoCo Warp 当前 splat 深度语义并保留
+  depth+validity 方案；RGB 合成与 depth 判定阈值解耦记为不阻塞 P6/P7 的
+  后续优化，当前未修改 MuJoCo Warp。
 - [x] 2026-10-31 核对 GaussGym 作者项目页及官方训练说明，更新任务定位、
   RGB/时序建模候选与分阶段计划；本项是规划调整，没有复现 GaussGym，
   未新增训练结果或关闭 P6/P7。来源见主调研报告第 6.4 节。
@@ -461,8 +509,9 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 - [x] 2026-10-25 运行 Viser collision、Play 配置和 MJCF terrain 联合测试：
   `33 passed`；Collision GUI 实时切换及 G3 状态同步已有自动测试。
 - [x] 2026-10-25 运行 manifest、MJCF、Play/demo 和 Tyro 定向回归：
-  `37 passed`；room1 真实 PLY/MJCF hash 校验通过，`make check` 与
-  `make docs` 均通过。
+  `37 passed`；当时的 room1 真实 PLY/MJCF hash 校验、`make check` 与
+  `make docs` 均通过。manifest 内容 hash 契约已于 2026-11-09 按项目决策
+  移除，该历史结果不代表当前加载器仍执行 SHA-256 校验。
 - [x] 2026-10-25 运行完整 P4 MJCF 定向回归：`23 passed`。覆盖定量
   落体、G1 contact sensor、terrain-height group 重定向及 velocity 环境
   初始化/单步；另行诊断确认无闭环策略的 G1 默认姿态无法静态站立。
@@ -574,9 +623,9 @@ Play 和 demo”；从 PLY 自动生成该 MJCF/mesh 明确属于 P8。
 - [x] 定义版本化 scene manifest schema。
 - [x] manifest 绑定 visual PLY、collision MJCF、统一 transform 和
   出生点。
-- [x] 记录 visual/collision 主资产 hash、单位和 schema
-  版本。
-- [x] 对主资产和 manifest 已声明 dependency 实现 hash 不匹配 fail fast。
+- [x] manifest 记录 visual/collision 路径、资产类型、单位约定和 schema
+  版本；2026-11-09 按项目决策移除主资产及 dependency SHA-256 字段和
+  运行时内容校验，允许本地重建资产后直接验证。
 - [x] 自动核对 MJCF 全部外部依赖都已出现在 manifest dependencies 中，
   并拒绝未引用的多余声明。
 - [x] 自动碰撞生成的转换参数和工具版本归入 P8 provenance，不作为
@@ -601,7 +650,8 @@ scene/
 ```
 
 - [x] 支持统一 asset-to-world 刚体变换。
-- [x] 增加 manifest schema、hash、路径边界、transform 和不匹配测试。
+- [x] 增加 manifest schema、路径边界、dependency、transform 和不匹配测试；
+  内容指纹不再属于 manifest v1 加载契约。
 - [x] train/play/demo 增加 `--scene-manifest`，同时保留分开的 PLY/MJCF
   接口；两种输入模式互斥。
 - [x] 消除 G1 3DGS 资产的开发机绝对默认路径，改为仓库资产、显式参数、
@@ -694,6 +744,9 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
   有限且 actor CNN 权重改变；actor/critic/optimizer 保存重载通过，并
   继续一次 24-step rollout/PPO 更新。相机置零会改变输出，仅验证连通性。
 - [x] 新增 `tests/run_g1_3dgs_vision_smoke.py` 的逐帧差异检查，冻结图像时报错。
+- [x] 视觉 smoke 支持可配置宽高（诊断默认 `320×240`）和固定基座姿态，
+  保存对齐的 RGB、raw depth、policy depth 及 validity PNG/NumPy；训练任务
+  默认分辨率仍为 `64×48`，未由诊断默认值改变。
 
 ### V2. 性能与并行训练
 
@@ -731,7 +784,8 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
   对齐 depth+validity 的结构化缺失/局部遮挡与整帧 dropout；参数可独立置零
   做消融，真实深度诊断仍单独保留。
 - [ ] 在 P7 固定任务/预算下多种子比较单帧 depth、depth+validity 与
-  时序 depth+validity，报告到达、碰撞、停车和稳定性并做 mask-only 消融。
+  时序 depth+validity，报告速度跟踪、制动、搜索、恢复、碰撞和稳定性并做
+  mask-only 消融。
 - [x] 注册 actor-only camera / asymmetric MLP critic 对照，真实 PPO update、
   checkpoint 重载与恢复后 update 通过；效果比较留给 P7 多种子实验。
 - [ ] 当前 main/RSL-RL 没有可复用的 privileged teacher → depth student
@@ -740,41 +794,56 @@ Vision/RSL-RL 工程链路，不使用 guided policy search，不将这些算法
   显存和 actor 推理延迟；更高分辨率/规模转入 P10，RGB 作为后续对照。
 
 P6 的完成边界是可训练、可恢复、可诊断且可消融的 P7-ready 视觉输入链路，
-不是目标避障效果结论。上面两项未勾选内容分别依赖 P7 MDP 和新的蒸馏研究，
+不是安全速度跟踪效果结论。上面两项未勾选内容分别依赖 P7 MDP 和新的蒸馏研究，
 不属于 P6 工程接口的完成条件。
 
-## 7. P7：3DGS 目标条件视觉避障
+## 7. P7：3DGS 安全感知速度跟踪
 
-P7 的首要目标是：G1 在具有独立碰撞几何的 3DGS 场景中，根据深度
-视觉和目标方向持续行走；当前方出现不可通行障碍时减速、停车或转向，
-在不碰撞、不跌倒的前提下到达目标。任务参考 GaussGym 的重建场景训练
-和 Hiking in the Wild 的 G1 深度感知运动、时序视觉及目标生成思路；不迁移
-它们的仿真栈，也不声称已复现其算法。
+P7 的首要目标是：G1 根据 nominal velocity command、本体状态和时序深度
+在 3DGS 场景中安全行走。前方安全时跟踪速度；发现障碍时减速或停车，
+必要时原地旋转搜索无碰撞方向，然后朝安全方向恢复速度跟踪。任务不定义为
+导航，不要求世界坐标目标，也不假设 LiDAR、VIO、SLAM 或其他定位传感器。
+方法参考 Hiking in the Wild 的 G1 深度感知关节控制和位置到速度命令设计，
+但不声称复现其算法。
 
-### N0. 首个减速/停车/转向目标到达任务
+P7 的详细任务、接口、指标和完成条件以
+`mjlab-3dgs-p7-safe-velocity.md` 为准。本节只跟踪项目进度，不能替代该
+需求契约。
 
-- [ ] 固定一个具有平坦支撑面、墙体和少量障碍的重建场景，准备人工校验的
-  PLY/collision 对；冻结训练/测试出生点和目标采样协议。
-- [ ] 基于现有 G1 控制配置定义随机目标到达：策略使用本体状态、相机与
-  目标相对方位/距离；不提供障碍真值位置、路径或地图给非特权 actor。
-- [ ] 根据障碍是否可绕行构造路线：可绕行时允许左/右转后继续前进，
-  封路时必须在安全距离外停止；训练集包含直行、转向、停车和绕行样本。
+### N0. 首个安全速度跟踪任务
+
+- [x] 形成独立 P7 requirements，明确上游复用边界、scenario catalog、
+  observation/action、奖励/终止、safety shield、基线和验收阶段。
+- [x] 选择 apartment 作为首个平坦支撑面、墙体和少量障碍的重建场景；
+  PLY/collision 共用坐标系，两个柱体同时具备不透明视觉和碰撞几何。
+- [x] 明确 actor 不读取世界位置、目标位置、地图或碰撞真值；世界位姿仅可
+  用于 evaluator，不能作为可部署传感输入。
+- [x] 2026-11-09 完成相关项目对比：ABS 作为任务/安全机制首要参考，Hiking
+  in the Wild 作为 G1 深度关节控制参考，Omni-Perception 作为安全速度跟踪
+  参考，GaussGym 作为 3DGS 仿真参考；没有项目可直接覆盖完整 P7。
+- [ ] 冻结 free、left-open、right-open、both-open、dead-end 和 false-alarm
+  场景、出生位姿、速度命令范围和数据划分。
+- [ ] 复用现有 `UniformVelocityCommand` 的直接 body-frame twist，首版关闭
+  `heading_command`；前方安全时跟踪命令，危险时允许暂时偏离并优先制动、
+  搜索和选取安全方向。
+- [ ] 在前方受阻时学习减速/停车、近似原地旋转扫描、选择安全侧并恢复
+  平移速度；没有安全出口时保持稳定站立。
 - [ ] 使用 P6 的时序 depth+validity 和本体历史，显式评估传感延迟、深度缺失
   及机器人制动距离；单帧 depth 保留为对照，不作为安全上界。
-- [ ] 初版沿用现有关节目标动作；是否改成导航策略加冻结步态控制器，作为
-  后续独立设计决策，不能混淆两种策略的训练/成功率结果。
-- [ ] 增加目标进度、稳定行走、障碍接近降速、安全停车和碰撞代价，
-  定义到达、跌倒、停滞、超时、非足端碰撞与不必要停车指标。
+- [ ] 初版沿用现有关节目标动作，不新增定位、PointGoal 或高层导航策略。
+- [ ] 增加安全区速度跟踪、提前减速、安全停车、方向搜索、恢复跟踪及
+  碰撞代价，防止永久停车、无限旋转、左右振荡和反复启停等奖励漏洞。
 - [ ] 在学习策略外设计可单独开关的 safety shield：按速度、系统延迟、制动
   能力和余量计算动态安全距离或 TTC，越界时限制前进或强制稳定站立。
   分别报告 shield 开/关结果，不把硬安全层的成功归因于策略学习。
-- [ ] 在同预算下比较 blind、privileged、mesh vision 与 3DGS vision；
-  RGB/depth 使用独立实验标识，报告 encoder 差异和额外监督。
+- [ ] 在同预算下比较 blind、deterministic depth adapter、privileged、
+  mesh vision 与 3DGS vision；规则 adapter 使用“制动—旋转—最大安全扇区—
+  恢复”的可解释基线。
 - [ ] 通过关闭、冻结或错配视觉，以及改变障碍布局的测试，验证视觉依赖；
-  不因平坦房间能走到目标就宣称策略学会了视觉导航。
-- [ ] 报告到达率、碰撞/跌倒率、停车成功率、首次发现障碍后停车距离、
-  最小障碍间距、不必要停车率、路径效率和端到端 SPS；先做同场景留出布局，
-  再测未见场景，区分记忆与跨场景泛化。
+  不因机器人能在平地跟踪速度就宣称策略学会了视觉避障。
+- [ ] 报告 free-space 跟踪误差、碰撞/跌倒率、制动距离、停止净空、左右
+  安全侧选择率、搜索/恢复成功率、dead-end 停车率、不必要停车/旋转率及
+  端到端 SPS；不报告目标到达率、路径效率或 SPL。
 - [ ] P8 资产通过几何/接触检查后，固定视觉和评估协议进行碰撞替换消融。
 
 ### 7.1 后续扩展：单级台阶、楼梯与地形行走
@@ -840,6 +909,10 @@ P7 的首要目标是：G1 在具有独立碰撞几何的 3DGS 场景中，根�
 契约的资产包，不应修改训练、Play 或物理场景加载接口。
 P4/P5 契约已经建立，P8 可与 P7 并行，不依赖视觉训练或台阶策略收敛。
 首个交付物是可复现的碰撞资产生成与导出基线，后续接入 P7 作替换对照。
+当前已完成 apartment 专用原型：脚本对 Gaussian 中心进行 opacity/bounds
+过滤、体素化、连通分量清理和递归 box 合并，并导出 collision-only MJCF。
+其地面范围、阈值、可见柱体和门洞回归均针对当前 apartment 调整，尚不能
+视为任意 3DGS 场景的通用生成器，也不具备语义部件识别能力。
 专题结论见
 [语义简化调研](mjlab-3dgs-p8-semantic-collision-research.md)：先做有限平面/
 box 几何基线，再接可替换语义前端，残差使用有限数量的凸体或局部 mesh。
@@ -848,6 +921,9 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 
 - [x] 完成语义前端、平面/primitive 重建和碰撞生成方法的首轮专题调研，
   区分 PLY-only、多视角图像与原始 mesh 输入条件，记录论文与公开代码边界。
+- [x] 建立 apartment 场景专用 center/voxel/box 原型：过滤 Gaussian 中心、
+  清理小连通分量、在受限表面扩张下合并 box，并生成 collision-only MJCF；
+  明确其场景常量、人工障碍和无语义能力边界。
 - [ ] 建立 center-only 有限平面/box 基线，保留门洞、地面边界和台阶边缘。
 - [ ] 小区域评估 SceneSplat 特征解码和标签质量；在相同 geom 预算下比较
   geometry-only 与语义引导方案，保留人工标签作为诊断上界。
@@ -859,6 +935,10 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 - [ ] 评估 MuJoCo Warp 当前版本下的 SDF 路径。
 
 ### G1. 生成管线
+
+apartment 原型已局部覆盖 opacity/bounds 过滤、体素化、连通分量清理、
+box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场景、带报告的
+通用管线”口径验收，因此在原型泛化前保持未完成。
 
 - [ ] 在独立 collision report/sidecar 中记录生成参数、随机种子、工具版本、
   输入哈希和 Gaussian ID 映射；保持现有 manifest v1 契约不变。
@@ -899,7 +979,8 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 - [ ] 运行完整 `make test`，包括经明确配置的 slow/real-asset 测试。
 - [x] 运行 `make docs`。
 - [ ] 检查当前所有 3DGS 修改，避免覆盖工作树中的用户改动。
-- [ ] 将当前未提交的 3DGS 工作整理成范围清晰的 commit。
+- [x] 2026-11-09 将 apartment 碰撞生成、可见碰撞柱体、manifest 无 SHA
+  契约和视觉诊断整理为提交 ``e735d0b``。
 - [ ] 按仓库规范准备 PR 描述；未经用户明确命令不创建 commit 或
   PR。
 
@@ -930,15 +1011,39 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 
 ## 13. 推荐执行顺序
 
-1. 当前先推进 P8 有限地面/墙体/障碍 box 基线与资产导出，再接语义前端；
-   保留 voxel/mesh 对照，不以完整语义模型复现阻塞几何基线。
-2. P7 用手工校验资产建立目标条件减速/停车/转向 MDP、safety shield
-   与 blind/privileged 基线，再训练 mesh vision 和 3DGS vision；P8 可独立推进。
+1. 当前主线推进 P7，用已校验的 apartment 视觉/碰撞资产建立安全感知速度
+   跟踪 MDP：完成制动、停车、原地旋转搜索、安全选向和恢复跟踪，并比较
+   blind、规则 adapter、privileged、mesh vision 和 3DGS vision。
+2. P8 并行将 apartment 专用 voxel/box 原型泛化为场景无关的几何基线，
+   再设计可替换语义前端；保留 voxel/mesh 对照，不以完整语义模型复现
+   阻塞 P7。
 3. 固定视觉资产和评估协议，对比手工/自动碰撞、视觉依赖及未见布局/场景。
 4. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
 
 ## 14. 更新记录
 
+- 2026-11-09：补充 P7 相关项目调研。确认 ABS 最接近任务与安全恢复机制，
+  Hiking in the Wild 最接近 G1 深度关节控制，Omni-Perception 最接近
+  速度跟踪与反应式避碰的联合训练，GaussGym 最接近 3DGS 仿真条件；没有
+  单一公开项目覆盖完整 P7，详细依据见主调研报告第 6.4 节。
+- 2026-11-09：按真实机器人没有位置传感器或定位模块的约束，将 P7 从
+  PointGoal/目标条件导航重构为 ``3DGS 安全感知速度跟踪``。新增
+  ``mjlab-3dgs-p7-safe-velocity.md``，明确 actor 只读取 velocity command、
+  本体状态和时序 depth+validity；复用 ``UniformVelocityCommand`` 和现有
+  joint action，不读取世界位置、目标位置、地图或碰撞真值。任务状态改为
+  正常跟踪、制动、停车、原地旋转搜索、安全选向、恢复跟踪和无出口站立；
+  取消目标到达率、路径效率和 SPL，运行时代码与训练仍未开始。
+- 2026-11-09：同步提交 ``e735d0b`` 后的项目状态。manifest v1 已移除
+  visual/collision/dependency SHA-256 字段和运行时内容校验，仍保留路径边界、
+  dependency 一致性、schema 和 transform 校验；视觉 smoke 支持 `320×240`
+  诊断、固定姿态及 RGB/raw/policy depth 导出。apartment 当前产物为 89 个
+  表面 box、地面和两个视觉/碰撞一致的柱体，相关定向回归 `14 passed`。
+  P7 进入资产/协议准备阶段，但安全速度跟踪 MDP、奖励和训练均未开始。
+- 2026-11-09：确认 apartment 的 ``generate_collision.py`` 是 P8 已实现的
+  场景专用几何原型，而非纯手工资产或通用算法。它已覆盖 Gaussian 中心
+  过滤、体素化、连通分量清理、box 合并和 MJCF 导出；跨场景参数推断、
+  泛化质量、语义碰撞生成及系统消融留待后续详细设计。主线调整为 P7，
+  P8 作为并行算法线继续推进。
 - 2026-11-07：P6 按 P7-ready 工程边界完成。新增 stride-2 四帧 robust
   depth+validity、固定延迟、低频 sample-and-hold、量程噪声、模糊、对齐
   结构化/整帧 dropout、asymmetric critic、ONNX 前向兼容、1/4-world 性能

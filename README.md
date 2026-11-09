@@ -71,12 +71,12 @@ uv run demo \
   --scene-manifest /path/to/scene/manifest.json
 ```
 
-The versioned manifest binds relative visual and collision paths, SHA-256
-fingerprints, coordinate conventions, one shared world transform, and spawn-point
-metadata. The loader checks that its dependency list exactly matches every file
-referenced by the collision MJCF. The spawn named ``default`` is applied to robot
-resets; choose another with ``--scene-spawn-point NAME``. For ad-hoc experiments,
-the independent ``--gaussian-splat-file`` and
+The versioned manifest binds relative visual and collision paths, coordinate
+conventions, one shared world transform, and spawn-point metadata. The loader checks
+that its dependency list exactly matches every file referenced by the collision
+MJCF. The spawn named ``default`` is applied to robot resets; choose another with
+``--scene-spawn-point NAME``. For ad-hoc experiments, the independent
+``--gaussian-splat-file`` and
 ``--collision-mjcf-file`` options remain available; they cannot be combined with
 ``--scene-manifest``.
 

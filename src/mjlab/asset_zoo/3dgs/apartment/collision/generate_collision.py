@@ -3,7 +3,6 @@
 Run from the repository root with uv run and this script's path.
 """
 
-import hashlib
 import json
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -15,8 +14,12 @@ from mjlab.scene.gaussian_splat import _read_ply_vertices
 
 VOXEL_SIZE = 0.1
 FLOOR_Z = 0.0
-MIN_BOX_FILL = 0.35
-MAX_SURFACE_EXPANSION = 0.2
+MIN_BOX_FILL = 0.20
+MAX_SURFACE_EXPANSION = 0.4
+VISIBLE_PILLARS = (
+  ((1.6, -0.45, 0.8), (0.90, 0.20, 0.10, 1.0)),
+  ((1.6, 0.45, 0.8), (0.10, 0.40, 0.90, 1.0)),
+)
 
 
 def merge_surface_boxes(occupied: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -106,7 +109,7 @@ def main() -> None:
     rgba="0.15 0.75 0.25 1",
   )
   world = ET.SubElement(model, "worldbody")
-  world.append(ET.Comment("Merged surface boxes; <=0.2 m gap filling. See README.md."))
+  world.append(ET.Comment("Merged surface boxes; <=0.4 m expansion. See README.md."))
 
   def add_box(name: str, centre: np.ndarray, half_size: np.ndarray) -> None:
     ET.SubElement(
@@ -124,6 +127,25 @@ def main() -> None:
   half_size[2] = 0.05
   add_box("ground", centre, half_size)
 
+  world.append(
+    ET.Comment("Opaque camera-visible obstacles with matching collision geometry.")
+  )
+  for index, (position, rgba) in enumerate(VISIBLE_PILLARS):
+    ET.SubElement(
+      world,
+      "geom",
+      name=f"pillar_{index:02d}",
+      type="cylinder",
+      pos=" ".join(f"{value:.4f}" for value in position),
+      size="0.1800 0.8000",
+      group="1",
+      contype="1",
+      conaffinity="1",
+      condim="3",
+      friction="1.0 0.005 0.0001",
+      rgba=" ".join(f"{value:.2f}" for value in rgba),
+    )
+
   boxes = merge_surface_boxes(occupied)
   for box_count, (start, end) in enumerate(boxes):
     centre = lower + (start + end) * VOXEL_SIZE / 2
@@ -134,9 +156,6 @@ def main() -> None:
   ET.indent(model, space="  ")
   xml_path.write_text(ET.tostring(model, encoding="unicode") + "\n")
   manifest["visual"]["path"] = ply_path.name
-  for key in ("visual", "collision"):
-    asset = root / manifest[key]["path"]
-    manifest[key]["sha256"] = hashlib.sha256(asset.read_bytes()).hexdigest()
   manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
   print(f"Bounds: {lower} to {upper}; floor z={FLOOR_Z}")
   print(f"Merged {voxel_count} occupied voxels into {len(boxes)} surface boxes")

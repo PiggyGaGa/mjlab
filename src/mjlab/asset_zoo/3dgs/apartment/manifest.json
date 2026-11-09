@@ -8,13 +8,11 @@
   },
   "visual": {
     "type": "3dgs_ply",
-    "path": "scene_transform_p5.ply",
-    "sha256": "92431ee0249c891aec23929f20b3a512d9c1a81f68cd0a19dec4cd2e6b03acef"
+    "path": "scene_transform_p5.ply"
   },
   "collision": {
     "type": "mjcf",
     "path": "collision/collision.xml",
-    "sha256": "5e8684e9f3266e1286f968e9980ffc66b914c54e7d563cd4917496d2090ba8d8",
     "geom_group": null,
     "dependencies": []
   },

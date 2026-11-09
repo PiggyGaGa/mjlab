@@ -336,13 +336,12 @@ For ``play`` or ``demo``, prefer the versioned manifest:
         --scene-manifest /path/to/scene/manifest.json
 
 ``manifest.json`` binds the PLY, collision MJCF, optional collision dependency
-files, SHA-256 fingerprints, right-handed Z-up metre convention, one
-``world_from_scene`` transform, and named spawn-point metadata. Asset paths must be
-relative to the manifest directory and cannot escape it. Hashes are checked before
-the scene is built, so mixing a stale PLY or collision file fails immediately. The
-loader also parses the MJCF and requires ``collision.dependencies`` to match its
-external file references exactly; an omitted mesh/heightfield/texture or an unused
-declaration fails before scene compilation. The
+files, right-handed Z-up metre convention, one ``world_from_scene`` transform, and
+named spawn-point metadata. Asset paths must be relative to the manifest directory
+and cannot escape it. The loader parses the MJCF and requires
+``collision.dependencies`` to match its external file references exactly; an
+omitted mesh/heightfield/texture or an unused declaration fails before scene
+compilation. The
 formal schema is ``src/mjlab/scene/schemas/scene_manifest.schema.json``.
 
 .. important::
@@ -357,8 +356,7 @@ formal schema is ``src/mjlab/scene/schemas/scene_manifest.schema.json``.
     PLY coordinates or detect geometric misalignment. ``world_from_scene`` applies
     the same rigid transform to both assets, so it cannot repair a mismatch
     between them. Convert and align source assets during preprocessing, including
-    Gaussian orientations and scales when transforming the PLY, then update its
-    SHA-256 fingerprint in the manifest.
+    Gaussian orientations and scales when transforming the PLY.
 
 The same manifest can be supplied to training:
 

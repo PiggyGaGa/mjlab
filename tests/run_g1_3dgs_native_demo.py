@@ -9,14 +9,12 @@ uv selects the released custom wheel on Linux x86_64 with Python 3.12/3.13.
 import argparse
 import importlib
 import time
-from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 
-from mjlab.scene import apply_scene_manifest
 from mjlab.scripts.demo import DemoConfig, _resolve_demo_args
 from mjlab.scripts.gcs import ensure_default_checkpoint, ensure_default_motion
 from mjlab.scripts.play import run_play
@@ -95,21 +93,16 @@ def main() -> None:
     _demo_mode=True,
   )
   task_id, config = _resolve_demo_args(config)
-  # Allow local scene edits without updating the manifest's asset hashes.
-  with patch(
-    "mjlab.scripts.play.apply_scene_manifest",
-    partial(apply_scene_manifest, verify_hashes=False),
-  ):
-    if args.interactive:
+  if args.interactive:
+    run_play(task_id, config)
+  else:
+    # Keep the production demo's environment and policy loading unchanged.
+    with patch.object(
+      NativeMujocoViewer,
+      "run",
+      lambda self: run_smoke(self, args.steps, args.timeout),
+    ):
       run_play(task_id, config)
-    else:
-      # Keep the production demo's environment and policy loading unchanged.
-      with patch.object(
-        NativeMujocoViewer,
-        "run",
-        lambda self: run_smoke(self, args.steps, args.timeout),
-      ):
-        run_play(task_id, config)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-"""Validate G1 depth observations, CNN/PPO updates, and checkpoint roundtrip.
+"""Validate G1 vision observations, CNN/PPO updates, and checkpoint roundtrip.
 
-uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 1
+uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 1 --fixed-base-pose
 uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 2 --scene-manifest PATH
 This is a pipeline check, not a trained locomotion or visual-benefit result.
 """
@@ -21,10 +21,10 @@ import torch
 from PIL import Image
 from tensordict import TensorDict
 
-from mjlab.envs import ManagerBasedRlEnv
+from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
 from mjlab.scene import apply_scene_manifest
-from mjlab.sensor import CameraSensor
+from mjlab.sensor import CameraSensor, CameraSensorCfg
 from mjlab.tasks.g1_3dgs import G1_3DGS_DEPTH_SENSOR
 from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 from mjlab.utils.torch import configure_torch_backends
@@ -51,13 +51,15 @@ def latest_camera_frame(camera: torch.Tensor) -> torch.Tensor:
 def check_depth(
   depth: torch.Tensor,
   num_envs: int,
+  height: int,
+  width: int,
   channels: int = 1,
   history_length: int = 0,
 ) -> None:
   expected = (
-    (num_envs, history_length, channels, 48, 64)
+    (num_envs, history_length, channels, height, width)
     if history_length > 0
-    else (num_envs, channels, 48, 64)
+    else (num_envs, channels, height, width)
   )
   assert depth.shape == expected
   assert depth.dtype == torch.float32
@@ -76,6 +78,15 @@ def raw_depth_tensor(env: ManagerBasedRlEnv) -> torch.Tensor:
   return raw
 
 
+def policy_camera_cfg(cfg: ManagerBasedRlEnvCfg) -> CameraSensorCfg:
+  scene = cfg.scene
+  sensor = next(
+    sensor for sensor in scene.sensors or () if sensor.name == G1_3DGS_DEPTH_SENSOR
+  )
+  assert isinstance(sensor, CameraSensorCfg)
+  return sensor
+
+
 def check_raw_depth_signal(env: ManagerBasedRlEnv) -> None:
   raw = raw_depth_tensor(env)
   assert torch.isfinite(raw).all()
@@ -85,18 +96,43 @@ def check_raw_depth_signal(env: ManagerBasedRlEnv) -> None:
   )
 
 
-def save_depth(depth: torch.Tensor, output: Path, label: str) -> None:
+def save_snapshot(
+  env: ManagerBasedRlEnv,
+  depth: torch.Tensor,
+  output: Path,
+  label: str,
+  cutoff_distance: float = 5.0,
+) -> None:
+  """Save aligned RGB, raw depth, and policy-ready depth for comparison."""
   full_arrays = depth.detach().cpu().numpy()
-  np.save(output / f"{label}.npy", full_arrays)
+  np.save(output / f"{label}-policy-depth.npy", full_arrays)
   arrays = latest_camera_frame(depth).detach().cpu().numpy()
-  for index, frame in enumerate(arrays[:, 0]):
-    # Fixed 0..5m normalization; white is far, black is near.
-    Image.fromarray((frame * 255).astype(np.uint8)).save(
-      output / f"{label}-env{index}.png"
+  sensor = env.scene[G1_3DGS_DEPTH_SENSOR]
+  assert isinstance(sensor, CameraSensor)
+  raw_depth = sensor.data.depth
+  rgb = sensor.data.rgb
+  assert raw_depth is not None
+  assert rgb is not None
+  raw_depth_arrays = raw_depth.detach().cpu().numpy()[..., 0]
+  rgb_arrays = rgb.detach().cpu().numpy()
+  np.save(output / f"{label}-raw-depth.npy", raw_depth_arrays)
+  np.save(output / f"{label}-rgb.npy", rgb_arrays)
+  for index, policy_frame in enumerate(arrays[:, 0]):
+    raw_frame = raw_depth_arrays[index]
+    display_depth = np.where(
+      np.isfinite(raw_frame) & (raw_frame > 0), raw_frame, cutoff_distance
+    )
+    display_depth = np.clip(display_depth / cutoff_distance, 0.0, 1.0)
+    Image.fromarray(rgb_arrays[index]).save(output / f"{label}-env{index}-rgb.png")
+    Image.fromarray((display_depth * 255).astype(np.uint8)).save(
+      output / f"{label}-env{index}-raw-depth.png"
+    )
+    Image.fromarray((policy_frame * 255).astype(np.uint8)).save(
+      output / f"{label}-env{index}-policy-depth.png"
     )
     if arrays.shape[1] == 2:
       Image.fromarray((arrays[index, 1] * 255).astype(np.uint8)).save(
-        output / f"{label}-validity-env{index}.png"
+        output / f"{label}-env{index}-validity.png"
       )
 
 
@@ -131,6 +167,21 @@ def run(args: argparse.Namespace, report: dict) -> None:
   history_length = cfg.observations["camera"].history_length or 0
   cfg.scene.num_envs = args.num_envs
   cfg.seed = args.seed
+  if args.fixed_base_pose:
+    reset_base = cfg.events["reset_base"]
+    pose_range = reset_base.params["pose_range"]
+    assert isinstance(pose_range, dict)
+    pose_range.update({axis: (0.0, 0.0) for axis in ("x", "y", "yaw")})
+  camera_cfg = policy_camera_cfg(cfg)
+  camera_cfg.width = args.width
+  camera_cfg.height = args.height
+  camera_cfg.data_types = ("rgb", "depth")
+  report["camera_capture"] = {
+    "width": args.width,
+    "height": args.height,
+    "data_types": list(camera_cfg.data_types),
+    "depth_visualization_cutoff_m": 5.0,
+  }
   if args.scene_manifest is not None:
     apply_scene_manifest(cfg.scene, args.scene_manifest)
     report["manifest_sha256"] = hashlib.sha256(
@@ -156,8 +207,15 @@ def run(args: argparse.Namespace, report: dict) -> None:
     wrapped = RslRlVecEnvWrapper(env, clip_actions=agent.clip_actions)
     obs = wrapped.get_observations()
     check_raw_depth_signal(env)
-    check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
-    save_depth(camera_tensor(obs), args.output, "reset")
+    check_depth(
+      camera_tensor(obs),
+      args.num_envs,
+      args.height,
+      args.width,
+      channels,
+      history_length,
+    )
+    save_snapshot(env, camera_tensor(obs), args.output, "reset")
     report["observation_shapes"] = {k: list(v.shape) for k, v in obs.items()}
     if args.num_envs > 1:
       before_qpos = env.sim.data.qpos[1:].clone()
@@ -217,7 +275,14 @@ def run(args: argparse.Namespace, report: dict) -> None:
           if args.depth_metrics:
             depth_samples.append(sample_raw_depth(env, "training", dones))
           assert torch.isfinite(rewards).all()
-          check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
+          check_depth(
+            camera_tensor(obs),
+            args.num_envs,
+            args.height,
+            args.width,
+            channels,
+            history_length,
+          )
           deltas.append(float((obs["camera"] - previous).abs().max()))
           raw = raw_depth_tensor(env)
           raw_deltas.append(float((raw - previous_raw).abs().max()))
@@ -225,7 +290,12 @@ def run(args: argparse.Namespace, report: dict) -> None:
           previous_raw = raw.clone()
           runner.alg.process_env_step(obs, rewards, dones, extras)
           if step in (0, args.steps - 1):
-            save_depth(camera_tensor(obs), args.output, f"iter{iteration}-step{step}")
+            save_snapshot(
+              env,
+              camera_tensor(obs),
+              args.output,
+              f"iter{iteration}-step{step}",
+            )
         runner.alg.compute_returns(obs)
       if torch.cuda.is_available():
         torch.cuda.synchronize()
@@ -314,7 +384,14 @@ def run(args: argparse.Namespace, report: dict) -> None:
         obs, rewards, dones, extras = wrapped.step(actions)
         if args.depth_metrics:
           depth_samples.append(sample_raw_depth(env, "resumed", dones))
-        check_depth(camera_tensor(obs), args.num_envs, channels, history_length)
+        check_depth(
+          camera_tensor(obs),
+          args.num_envs,
+          args.height,
+          args.width,
+          channels,
+          history_length,
+        )
         assert torch.isfinite(rewards).all()
         restored.alg.process_env_step(obs, rewards, dones, extras)
       restored.alg.compute_returns(obs)
@@ -364,6 +441,9 @@ def main() -> None:
   parser.add_argument("--steps", type=int, default=24)
   parser.add_argument("--iterations", type=int, default=2)
   parser.add_argument("--seed", type=int, default=42)
+  parser.add_argument("--width", type=int, default=320)
+  parser.add_argument("--height", type=int, default=240)
+  parser.add_argument("--fixed-base-pose", action="store_true")
   parser.add_argument("--depth-metrics", action="store_true")
   modes = parser.add_mutually_exclusive_group()
   modes.add_argument("--validity-mask", action="store_true")
@@ -374,8 +454,10 @@ def main() -> None:
   parser.add_argument("--device", default="cuda:0")
   parser.add_argument("--output", type=Path, default=Path("/tmp/p6-vision-smoke"))
   args = parser.parse_args()
-  if min(args.num_envs, args.iterations) < 1 or args.steps < 4:
-    parser.error("Positive environments/iterations and at least four steps required")
+  if min(args.num_envs, args.iterations, args.width, args.height) < 1:
+    parser.error("Environments, iterations, width, and height must be positive")
+  if args.steps < 4:
+    parser.error("At least four steps are required")
   args.output.mkdir(parents=True, exist_ok=True)
   report = {
     "date": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),

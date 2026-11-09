@@ -9,7 +9,9 @@ Added
 ^^^^^
 
 - Added an apartment scene collision approximation generated from Gaussian
-  centres, with a ground slab, voxel surface boxes, and a rebuild script.
+  centres, with a ground slab, voxel surface boxes, and a rebuild script. Two
+  opaque camera-visible pillars provide matched visual and collision geometry for
+  RGB-depth alignment checks against a 3DGS background.
 
 - Added an independent four-frame G1 3DGS depth+validity task. It reuses the
   observation manager's history buffers and preserves image structure as
@@ -21,7 +23,10 @@ Added
   two-step sample period, and applies aligned range noise, blur, structured
   occlusion, and frame dropout to depth+validity. The asymmetric variant keeps
   camera input actor-only. The vision smoke tool now covers every P6 encoding and
-  reports actor inference, rollout throughput, update time, and Torch memory.
+  reports actor inference, rollout throughput, update time, and Torch memory. It
+  also accepts custom image dimensions and exports aligned RGB, raw-depth, and
+  policy-depth PNG and NumPy snapshots. A fixed-base diagnostic mode supports
+  reproducible camera/scene alignment checks.
 
 - Added an independent G1 depth+validity training task while preserving the
   single-channel baseline. The second channel distinguishes missing raw depth
@@ -53,8 +58,8 @@ Added
   and the scene's collision model remain in use.
 
 - Added a versioned JSON scene manifest that binds a 3DGS PLY and collision MJCF,
-  verifies SHA-256 fingerprints and bundle-local paths, and applies one shared
-  world transform. ``train``, ``play``, and ``demo`` accept ``--scene-manifest``;
+  validates bundle-local paths, and applies one shared world transform. ``train``,
+  ``play``, and ``demo`` accept ``--scene-manifest``;
   the existing independent PLY and collision options remain available. Manifest
   loading now verifies that declared collision dependencies exactly match MJCF file
   references and applies the selected spawn point to robot reset position and
@@ -97,8 +102,9 @@ Added
 Changed
 ^^^^^^^
 
-- Reduced apartment surface collision boxes from 1,904 to 198 by merging scan
-  gaps with a bounded 20 cm expansion while retaining the original occupancy.
+- Reduced the current apartment surface collision approximation to 89 boxes by
+  merging scan gaps with a bounded 40 cm expansion while retaining the original
+  occupied voxels and a doorway regression.
 
 - Changed the default G1 3DGS asset and scene test inputs to
   ``ArtanimMotionCaptureStudio/scene_transform.ply``.

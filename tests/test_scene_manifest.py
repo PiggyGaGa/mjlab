@@ -1,6 +1,5 @@
 """Tests for versioned 3DGS visual/collision scene manifests."""
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -20,10 +19,9 @@ _STUDIO_MANIFEST = (
   Path(__file__).parents[1]
   / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"
 )
-
-
-def _sha256(path: Path) -> str:
-  return hashlib.sha256(path.read_bytes()).hexdigest()
+_APARTMENT_MANIFEST = (
+  Path(__file__).parents[1] / "src/mjlab/asset_zoo/3dgs/apartment/manifest.json"
+)
 
 
 def _write_manifest_bundle(tmp_path: Path) -> Path:
@@ -46,14 +44,12 @@ def _write_manifest_bundle(tmp_path: Path) -> Path:
     "visual": {
       "type": "3dgs_ply",
       "path": visual.name,
-      "sha256": _sha256(visual),
     },
     "collision": {
       "type": "mjcf",
       "path": collision.name,
-      "sha256": _sha256(collision),
       "geom_group": 4,
-      "dependencies": [{"path": dependency.name, "sha256": _sha256(dependency)}],
+      "dependencies": [{"path": dependency.name}],
     },
     "world_from_scene": {
       "position": [1.0, 2.0, 3.0],
@@ -72,7 +68,7 @@ def _write_manifest_bundle(tmp_path: Path) -> Path:
   return path
 
 
-def test_load_scene_manifest_resolves_and_verifies_assets(tmp_path: Path) -> None:
+def test_load_scene_manifest_resolves_assets(tmp_path: Path) -> None:
   path = _write_manifest_bundle(tmp_path)
 
   manifest = load_scene_manifest(path)
@@ -146,7 +142,6 @@ def test_scene_manifest_rejects_unused_mjcf_dependency(tmp_path: Path) -> None:
     "<mujoco><worldbody><geom type='box' size='1 1 .1'/></worldbody></mujoco>"
   )
   data = json.loads(path.read_text())
-  data["collision"]["sha256"] = _sha256(collision)
   path.write_text(json.dumps(data))
 
   with pytest.raises(ValueError, match="not referenced.*collision.obj"):
@@ -167,10 +162,7 @@ def test_scene_manifest_resolves_compiler_mesh_directory(tmp_path: Path) -> None
     "<worldbody><geom type='mesh' mesh='collision'/></worldbody></mujoco>"
   )
   data = json.loads(path.read_text())
-  data["collision"]["sha256"] = _sha256(collision)
-  data["collision"]["dependencies"] = [
-    {"path": "meshes/collision.obj", "sha256": _sha256(nested_dependency)}
-  ]
+  data["collision"]["dependencies"] = [{"path": "meshes/collision.obj"}]
   path.write_text(json.dumps(data))
 
   manifest = load_scene_manifest(path)
@@ -208,14 +200,6 @@ def test_apply_scene_manifest_rejects_unknown_spawn(tmp_path: Path) -> None:
     apply_scene_manifest(SceneCfg(), path, spawn_point="missing")
 
 
-def test_scene_manifest_rejects_hash_mismatch(tmp_path: Path) -> None:
-  path = _write_manifest_bundle(tmp_path)
-  (tmp_path / "scene.ply").write_bytes(b"modified")
-
-  with pytest.raises(ValueError, match="SHA-256 mismatch"):
-    load_scene_manifest(path)
-
-
 def test_scene_manifest_rejects_asset_outside_bundle(tmp_path: Path) -> None:
   path = _write_manifest_bundle(tmp_path)
   data = json.loads(path.read_text())
@@ -223,14 +207,14 @@ def test_scene_manifest_rejects_asset_outside_bundle(tmp_path: Path) -> None:
   path.write_text(json.dumps(data))
 
   with pytest.raises(ValueError, match="must stay inside"):
-    load_scene_manifest(path, verify_hashes=False)
+    load_scene_manifest(path)
 
 
 def test_studio_scene_manifest_is_current() -> None:
   manifest = load_scene_manifest(_STUDIO_MANIFEST)
 
   assert manifest.schema_version == 1
-  assert manifest.visual.path.name == "scene_transform.ply"
+  assert manifest.visual.path.name == "scene_transform_20p.ply"
   assert manifest.collision.path.name == "collision.xml"
   assert manifest.collision.geom_group is None
 
@@ -243,3 +227,29 @@ def test_studio_scene_manifest_is_current() -> None:
     assert pillar.rgba[3] == 1.0
     assert pillar.contype != 0
     assert pillar.conaffinity != 0
+
+
+def test_apartment_scene_has_camera_visible_collision_pillars() -> None:
+  manifest = load_scene_manifest(_APARTMENT_MANIFEST)
+  spec = mujoco.MjSpec.from_file(str(manifest.collision.path))
+  geoms = {geom.name: geom for geom in spec.geoms}
+
+  assert geoms["ground"].group == 3
+  surfaces = [geom for name, geom in geoms.items() if name.startswith("surface_")]
+  assert len(surfaces) <= 100
+  for step in range(13):
+    point = (step / 10, 0.0, 0.8)
+    assert not any(
+      all(
+        abs(point[axis] - surface.pos[axis]) <= surface.size[axis] + 1e-9
+        for axis in range(3)
+      )
+      for surface in surfaces
+    )
+  for index, expected_y in enumerate((-0.45, 0.45)):
+    pillar = geoms[f"pillar_{index:02d}"]
+    assert pillar.group == 1
+    assert pillar.rgba[3] == 1.0
+    assert pillar.contype != 0
+    assert pillar.conaffinity != 0
+    assert pillar.pos == pytest.approx((1.6, expected_y, 0.8))

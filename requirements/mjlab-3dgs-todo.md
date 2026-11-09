@@ -131,8 +131,8 @@ collision MJCF/mesh、manifest、内容指纹及 provenance，不修改训练接
   校验，以及 group 3 碰撞代理调试显示。
 - 已提供 room1 地面与六柱碰撞资产及基于标准 demo policy 的人工
   Play 冒烟脚本。
-- 已提供 schema v1 scene manifest，将 PLY、collision MJCF、SHA-256、
-  坐标约定、统一 transform 和 spawn-point metadata 绑定为一个入口；
+- 已提供 schema v1 scene manifest，将 PLY、collision MJCF、坐标约定、
+  统一 transform 和 spawn-point metadata 绑定为一个入口；
   train/play/demo 均可加载。
 - 独立 G1 3DGS Depth 训练任务已读取相机 observation，单/双环境 CNN/PPO
   短更新与 checkpoint 恢复通过；普通本体 G1 任务仍不创建相机工作负载。
@@ -218,6 +218,12 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 仍需正式验证：
 
 - [ ] 记录 splat depth 的精确定义、遮挡边界和已知误差。
+- [ ] 后续优化（不阻塞 P6/P7）：评估将 MuJoCo Warp 的 3DGS RGB
+  合成终止阈值与 depth 表面判定阈值解耦。当前保持
+  ``transmittance < 0.005`` 的既有深度语义以及 depth + validity 输入，
+  不修改已安装依赖。若后续实施，应优先向 MuJoCo Warp 提供默认行为兼容的
+  可选参数，并构建、锁定独立 wheel；同时比较孔洞率、漂浮点误检、
+  RGB/depth 对齐、渲染吞吐及已有 checkpoint 的观测分布变化。
 - [ ] 验证不同相机数量、分辨率和更新频率下的显存及吞吐。
 - [ ] 验证视觉训练路径的 CUDA graph 行为。
 - [ ] 建立 segmentation 能力边界和测试。

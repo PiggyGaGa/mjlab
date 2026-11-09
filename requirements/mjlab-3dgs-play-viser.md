@@ -243,8 +243,8 @@ reset 后机器人状态继续更新，静态 splat 不重复上传。
 
 依赖：Play Phase 0。
 
-当前进度：已实现 schema v1 manifest 的相对路径、SHA-256、坐标系和
-统一 transform 校验，并通过 ``--scene-manifest`` 接入 Play/demo；原有
+当前进度：已实现 schema v1 manifest 的相对路径、坐标系和统一 transform
+校验，并通过 ``--scene-manifest`` 接入 Play/demo；原有
 ``--gaussian-splat-file`` 与 ``--collision-mjcf-file`` 继续作为互斥的
 临时实验入口。checkpoint 与场景兼容性元数据仍待补充。
 

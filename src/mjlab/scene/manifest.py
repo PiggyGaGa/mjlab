@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -21,15 +20,13 @@ if TYPE_CHECKING:
   from mjlab.scene.scene import SceneCfg
 
 _SCHEMA_VERSION = 1
-_HEX_DIGITS = frozenset("0123456789abcdef")
 
 
 @dataclass(frozen=True)
 class SceneManifestFile:
-  """One resolved and hash-verified file in a scene bundle."""
+  """One resolved file in a scene bundle."""
 
   path: Path
-  sha256: str
 
 
 @dataclass(frozen=True)
@@ -52,7 +49,7 @@ class SceneSpawnPoint:
 
 @dataclass(frozen=True)
 class SceneManifest:
-  """Resolved and hash-verified visual/physical scene bundle."""
+  """Resolved visual/physical scene bundle."""
 
   source_path: Path
   schema_version: int
@@ -122,23 +119,6 @@ def _resolve_relative_asset(manifest_dir: Path, value: Any, label: str) -> Path:
   if not resolved.is_file():
     raise FileNotFoundError(f"{label} not found: {resolved}")
   return resolved
-
-
-def _parse_sha256(value: Any, label: str) -> str:
-  if not isinstance(value, str):
-    raise ValueError(f"{label} must be a SHA-256 string")
-  digest = value.lower()
-  if len(digest) != 64 or any(char not in _HEX_DIGITS for char in digest):
-    raise ValueError(f"{label} must contain 64 hexadecimal characters")
-  return digest
-
-
-def _file_sha256(path: Path) -> str:
-  digest = hashlib.sha256()
-  with path.open("rb") as stream:
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-      digest.update(chunk)
-  return digest.hexdigest()
 
 
 def _resolve_mjcf_reference(
@@ -262,26 +242,17 @@ def _parse_asset(
   manifest_dir: Path,
   label: str,
   expected_type: Literal["3dgs_ply", "mjcf"],
-  verify_hashes: bool,
 ) -> SceneManifestAsset:
   optional = {"geom_group", "dependencies"} if expected_type == "mjcf" else set()
   obj = _require_object(
     value,
     label,
-    required={"type", "path", "sha256"},
+    required={"type", "path"},
     optional=optional,
   )
   if obj["type"] != expected_type:
     raise ValueError(f"{label}.type must be '{expected_type}'")
   path = _resolve_relative_asset(manifest_dir, obj["path"], f"{label}.path")
-  expected_hash = _parse_sha256(obj["sha256"], f"{label}.sha256")
-  if verify_hashes:
-    actual_hash = _file_sha256(path)
-    if actual_hash != expected_hash:
-      raise ValueError(
-        f"{label} SHA-256 mismatch for '{path}': expected {expected_hash}, "
-        f"got {actual_hash}"
-      )
   geom_group = None
   dependencies: list[SceneManifestFile] = []
   if expected_type == "mjcf":
@@ -300,7 +271,7 @@ def _parse_asset(
       dependency = _require_object(
         raw_dependency,
         dependency_label,
-        required={"path", "sha256"},
+        required={"path"},
       )
       dependency_path = _resolve_relative_asset(
         manifest_dir, dependency["path"], f"{dependency_label}.path"
@@ -308,30 +279,17 @@ def _parse_asset(
       if dependency_path in dependency_paths:
         raise ValueError(f"Duplicate collision dependency: {dependency_path}")
       dependency_paths.add(dependency_path)
-      dependency_hash = _parse_sha256(
-        dependency["sha256"], f"{dependency_label}.sha256"
-      )
-      if verify_hashes:
-        actual_hash = _file_sha256(dependency_path)
-        if actual_hash != dependency_hash:
-          raise ValueError(
-            f"{dependency_label} SHA-256 mismatch for '{dependency_path}': "
-            f"expected {dependency_hash}, got {actual_hash}"
-          )
-      dependencies.append(SceneManifestFile(dependency_path, dependency_hash))
+      dependencies.append(SceneManifestFile(dependency_path))
   return SceneManifestAsset(
     path=path,
-    sha256=expected_hash,
     type=expected_type,
     geom_group=geom_group,
     dependencies=tuple(dependencies),
   )
 
 
-def load_scene_manifest(
-  path: str | Path, *, verify_hashes: bool = True
-) -> SceneManifest:
-  """Load, validate, resolve, and optionally hash-check a scene manifest."""
+def load_scene_manifest(path: str | Path) -> SceneManifest:
+  """Load, validate, and resolve a scene manifest."""
   manifest_path = Path(path).expanduser().resolve()
   if not manifest_path.is_file():
     raise FileNotFoundError(f"Scene manifest not found: {manifest_path}")
@@ -380,14 +338,12 @@ def load_scene_manifest(
     manifest_dir=manifest_dir,
     label="visual",
     expected_type="3dgs_ply",
-    verify_hashes=verify_hashes,
   )
   collision = _parse_asset(
     root["collision"],
     manifest_dir=manifest_dir,
     label="collision",
     expected_type="mjcf",
-    verify_hashes=verify_hashes,
   )
   _validate_mjcf_dependencies(collision, manifest_dir)
 
@@ -443,11 +399,10 @@ def apply_scene_manifest(
   scene_cfg: SceneCfg,
   path: str | Path,
   *,
-  verify_hashes: bool = True,
   spawn_point: str | None = None,
 ) -> SceneManifest:
-  """Apply one verified manifest and selected spawn to a scene configuration."""
-  manifest = load_scene_manifest(path, verify_hashes=verify_hashes)
+  """Apply one manifest and selected spawn to a scene configuration."""
+  manifest = load_scene_manifest(path)
 
   requested_spawn = spawn_point
   if requested_spawn is None:

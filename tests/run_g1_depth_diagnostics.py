@@ -76,7 +76,7 @@ def main() -> None:
   parser.add_argument(
     "--scene-manifest",
     type=Path,
-    default=Path("src/mjlab/asset_zoo/3dgs/room1/manifest.json"),
+    default=Path("src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"),
   )
   parser.add_argument("--output", type=Path, default=Path("/tmp/p6-depth-diagnostics"))
   parser.add_argument("--pose-sweep", action="store_true")

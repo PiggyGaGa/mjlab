@@ -4,7 +4,7 @@
   "mujoco": "3.16.0+3dgs",
   "torch": "2.14.0+cu130",
   "checkpoint": "/home/yzt/humanoid/Unitree/unitree_rl_mjlab/logs/rsl_rl/g1_velocity/2026-08-25_12-42-10/model_10000.pt",
-  "method": "on/off viewer only; same loaded room1 scene; two trials each",
+  "method": "on/off viewer only; same loaded ArtanimMotionCaptureStudio scene; two trials each",
   "limitations": [
     "No rendered-frame capture API; no image/occlusion equivalence claim",
     "GPU memory is device-wide and is not a process allocation benchmark",

@@ -8,13 +8,13 @@
   },
   "visual": {
     "type": "3dgs_ply",
-    "path": "point_cloud_2_transform.ply",
-    "sha256": "6a5bf5d5e8021701f8aa1ee2e93388f7a5d5181f13c0701fe73121e2a974f729"
+    "path": "scene_transform_20p.ply",
+    "sha256": "0451b2e220fe01ce603f8b61e32167fc4241d26582ea444c945d23018d361ba0"
   },
   "collision": {
     "type": "mjcf",
     "path": "collision/collision.xml",
-    "sha256": "606c4aeae97787f1d0df6c93e0d49f13988b552d10962831730d4e757054e763",
+    "sha256": "0cbce00b6305d4fb17e6d9814e181d157157c1f60767f59560ce6da92ae1f9f2",
     "geom_group": null,
     "dependencies": []
   },

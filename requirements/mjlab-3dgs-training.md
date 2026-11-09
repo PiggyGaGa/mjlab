@@ -322,6 +322,16 @@ PLY 与
 当前实现提供 schema v1、严格字段和相对路径校验、主文件及 dependency
 的 SHA-256 校验，并自动核对 MJCF 引用与 dependency 声明完全一致；
 ``world_from_scene`` 同时应用于 PLY、MJCF 固定根和出生点。
+
+**PLY 文件本身的坐标系也必须与 MuJoCo 一致**：右手系、Z 轴向上、
+长度单位为米，并与碰撞 MJCF 使用相同的场景局部原点、轴向和尺度。
+否则加载后会出现视觉场景与物理碰撞几何的位置、朝向或大小不一致。
+`coordinate_system` 只是坐标约定声明，不会自动转换 PLY，也不会检测几何
+是否对齐；`world_from_scene` 对视觉与碰撞应用同一个刚体变换，不能修复
+两者原有的相对错位。源资产坐标不一致时，应先在预处理阶段完成转换和对齐；
+转换 PLY 时需同时处理 Gaussian 中心、朝向和尺度，之后更新 manifest 中的
+SHA-256。
+
 Play/demo/train 均接受 ``--scene-manifest`` 和可选的
 ``--scene-spawn-point``。为防止两套来源产生歧义，manifest 不得与
 ``--gaussian-splat-file``、

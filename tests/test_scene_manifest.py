@@ -16,8 +16,9 @@ from mjlab.scene import (
 )
 from mjlab.terrains import TerrainEntityCfg
 
-_ROOM1_MANIFEST = (
-  Path(__file__).parents[1] / "src/mjlab/asset_zoo/3dgs/room1/manifest.json"
+_STUDIO_MANIFEST = (
+  Path(__file__).parents[1]
+  / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"
 )
 
 
@@ -225,11 +226,11 @@ def test_scene_manifest_rejects_asset_outside_bundle(tmp_path: Path) -> None:
     load_scene_manifest(path, verify_hashes=False)
 
 
-def test_room1_scene_manifest_is_current() -> None:
-  manifest = load_scene_manifest(_ROOM1_MANIFEST)
+def test_studio_scene_manifest_is_current() -> None:
+  manifest = load_scene_manifest(_STUDIO_MANIFEST)
 
   assert manifest.schema_version == 1
-  assert manifest.visual.path.name == "point_cloud_2_transform.ply"
+  assert manifest.visual.path.name == "scene_transform.ply"
   assert manifest.collision.path.name == "collision.xml"
   assert manifest.collision.geom_group is None
 

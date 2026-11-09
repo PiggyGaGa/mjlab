@@ -9,7 +9,7 @@
     "iterations": 4,
     "seed": 42,
     "depth_metrics": true,
-    "scene_manifest": "src/mjlab/asset_zoo/3dgs/room1/manifest.json",
+    "scene_manifest": "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json",
     "device": "cuda:0",
     "output": "/tmp/p6-rollout-depth-4"
   },
@@ -136,7 +136,7 @@
   "scene_assets": {
     "assets": [
       {
-        "path": "/home/yzt/Documents/3DGS/mjlab/src/mjlab/asset_zoo/3dgs/room1/point_cloud_2_transform.ply",
+        "path": "/home/yzt/Documents/3DGS/mjlab/src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/scene_transform.ply",
         "pos": [
           0.0,
           0.0,

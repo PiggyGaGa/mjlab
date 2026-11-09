@@ -11,7 +11,7 @@ G1_3DGS_VIDEO_SENSOR = "g1_3dgs_video"
 G1_3DGS_DEPTH_SENSOR = "g1_3dgs_depth"
 _DEFAULT_G1_3DGS_ASSET = str(
   Path(__file__).resolve().parents[1]
-  / "asset_zoo/3dgs/room1/point_cloud_2_transform.ply"
+  / "asset_zoo/3dgs/ArtanimMotionCaptureStudio/scene_transform.ply"
 )
 
 

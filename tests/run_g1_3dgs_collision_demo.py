@@ -1,4 +1,4 @@
-"""Run the bundled G1 demo policy in the room1 3DGS collision test scene.
+"""Run the bundled G1 policy in the ArtanimMotionCaptureStudio 3DGS scene.
 
 Run from the repository root with:
 
@@ -12,12 +12,12 @@ from mjlab.scripts.gcs import ensure_default_checkpoint, ensure_default_motion
 from mjlab.scripts.play import run_play
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_ROOM1_DIR = _REPO_ROOT / "src/mjlab/asset_zoo/3dgs/room1"
-_SCENE_MANIFEST_PATH = _ROOM1_DIR / "manifest.json"
+_STUDIO_DIR = _REPO_ROOT / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio"
+_SCENE_MANIFEST_PATH = _STUDIO_DIR / "manifest.json"
 
 
 def main() -> None:
-  """Load the standard demo policy with room1 visual and collision assets."""
+  """Load the standard demo policy with the studio visual and collision assets."""
   if not _SCENE_MANIFEST_PATH.is_file():
     raise FileNotFoundError(f"Required test asset not found: {_SCENE_MANIFEST_PATH}")
 

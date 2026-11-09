@@ -16,8 +16,9 @@ from mjlab.sim import MujocoCfg, Simulation, SimulationCfg
 from mjlab.tasks.velocity.config.g1.env_cfgs import unitree_g1_flat_env_cfg
 from mjlab.terrains import TerrainEntityCfg
 
-_ROOM1_COLLISION_PATH = (
-  Path(__file__).parents[1] / "src/mjlab/asset_zoo/3dgs/room1/collision/collision.xml"
+_STUDIO_COLLISION_PATH = (
+  Path(__file__).parents[1]
+  / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/collision/collision.xml"
 )
 
 
@@ -189,8 +190,8 @@ def test_mjcf_terrain_loads_heightfield(tmp_path: Path) -> None:
   assert _build_scene(path).compile().nhfield == 1
 
 
-def test_room1_collision_asset_compiles() -> None:
-  scene = _build_scene(_ROOM1_COLLISION_PATH)
+def test_studio_collision_asset_compiles() -> None:
+  scene = _build_scene(_STUDIO_COLLISION_PATH)
   model = scene.compile()
 
   assert model.ngeom == 7
@@ -201,8 +202,8 @@ def test_room1_collision_asset_compiles() -> None:
     )
 
 
-def test_room1_worldbody_geoms_initialize_as_terrain_entity() -> None:
-  scene = _build_scene(_ROOM1_COLLISION_PATH)
+def test_studio_worldbody_geoms_initialize_as_terrain_entity() -> None:
+  scene = _build_scene(_STUDIO_COLLISION_PATH)
   model = scene.compile()
   sim = Simulation(
     num_envs=1,
@@ -230,7 +231,7 @@ def test_g1_foot_contact_sensor_resolves_external_terrain(device: str) -> None:
   scene = Scene(
     SceneCfg(
       terrain=TerrainEntityCfg(
-        terrain_type="mjcf", mjcf_path=str(_ROOM1_COLLISION_PATH)
+        terrain_type="mjcf", mjcf_path=str(_STUDIO_COLLISION_PATH)
       ),
       entities={"robot": get_g1_robot_cfg()},
       sensors=(feet_sensor,),
@@ -265,7 +266,7 @@ def test_external_mjcf_retargets_g1_terrain_height_sensor(device: str) -> None:
     SceneCfg(
       terrain=TerrainEntityCfg(
         terrain_type="mjcf",
-        mjcf_path=str(_ROOM1_COLLISION_PATH),
+        mjcf_path=str(_STUDIO_COLLISION_PATH),
         mjcf_geom_group=3,
       ),
       entities={"robot": get_g1_robot_cfg()},
@@ -279,13 +280,15 @@ def test_external_mjcf_retargets_g1_terrain_height_sensor(device: str) -> None:
 
 @pytest.mark.slow
 @pytest.mark.filterwarnings("ignore:overflow encountered in cast:RuntimeWarning")
-def test_g1_velocity_env_steps_with_room1_external_collision(device: str) -> None:
+def test_g1_velocity_env_steps_with_studio_external_collision(
+  device: str,
+) -> None:
   cfg = unitree_g1_flat_env_cfg(play=True)
   cfg.scene.num_envs = 1
   assert cfg.scene.terrain is not None
   cfg.scene.terrain.terrain_type = "mjcf"
   cfg.scene.terrain.terrain_generator = None
-  cfg.scene.terrain.mjcf_path = str(_ROOM1_COLLISION_PATH)
+  cfg.scene.terrain.mjcf_path = str(_STUDIO_COLLISION_PATH)
 
   env = ManagerBasedRlEnv(cfg=cfg, device=device)
   try:
@@ -306,7 +309,7 @@ def test_g1_velocity_env_steps_with_room1_external_collision(device: str) -> Non
     env.close()
 
 
-def test_room1_collision_stably_catches_falling_box(device: str) -> None:
+def test_studio_collision_stably_catches_falling_box(device: str) -> None:
   box_xml = """
     <mujoco>
       <worldbody>
@@ -321,7 +324,7 @@ def test_room1_collision_stably_catches_falling_box(device: str) -> None:
   scene = Scene(
     SceneCfg(
       terrain=TerrainEntityCfg(
-        terrain_type="mjcf", mjcf_path=str(_ROOM1_COLLISION_PATH)
+        terrain_type="mjcf", mjcf_path=str(_STUDIO_COLLISION_PATH)
       ),
       entities={
         "box": EntityCfg(

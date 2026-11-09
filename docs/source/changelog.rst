@@ -8,6 +8,9 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added an apartment scene collision approximation generated from Gaussian
+  centres, with a ground slab, voxel surface boxes, and a rebuild script.
+
 - Added an independent four-frame G1 3DGS depth+validity task. It reuses the
   observation manager's history buffers and preserves image structure as
   ``(B, 4, 2, 48, 64)``; a small model adapter stacks time and channels only at
@@ -93,6 +96,12 @@ Added
 
 Changed
 ^^^^^^^
+
+- Reduced apartment surface collision boxes from 1,904 to 198 by merging scan
+  gaps with a bounded 20 cm expansion while retaining the original occupancy.
+
+- Changed the default G1 3DGS asset and scene test inputs to
+  ``ArtanimMotionCaptureStudio/scene_transform.ply``.
 
 - The bundled room1 synthetic pillars are now opaque, camera-visible collision
   geoms, so the native 3DGS compositor preserves their depth occlusion. Its physical

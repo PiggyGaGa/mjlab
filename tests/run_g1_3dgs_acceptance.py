@@ -272,7 +272,10 @@ def main() -> None:
     "torch": torch.__version__,
     "checkpoint": str(args.checkpoint.resolve()),
     "legacy_phase_observations": args.legacy_phase_observations,
-    "method": "on/off viewer only; same loaded room1 scene; two trials each",
+    "method": (
+      "on/off viewer only; same loaded ArtanimMotionCaptureStudio scene; "
+      "two trials each"
+    ),
     "limitations": [
       "No rendered-frame capture API; no image/occlusion equivalence claim",
       "GPU memory is device-wide and is not a process allocation benchmark",
@@ -300,7 +303,9 @@ def main() -> None:
         "Mjlab-Velocity-Flat-Unitree-G1-3DGS",
         PlayConfig(
           checkpoint_file=str(args.checkpoint),
-          scene_manifest=str(_ROOT / "src/mjlab/asset_zoo/3dgs/room1/manifest.json"),
+          scene_manifest=str(
+            _ROOT / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"
+          ),
           num_envs=1,
           viewer=args.viewer,
           collision_visible=args.collision_visible,

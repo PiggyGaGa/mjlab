@@ -1,0 +1,6 @@
+Title: Artanim Motion Capture Studio
+Author: Sylvain Chagué (https://superspl.at/user/schague)
+Source: https://superspl.at/scene/3d9d659a
+License: CC Attribution (Creative Commons Attribution)
+License URL: http://creativecommons.org/licenses/by/4.0/
+Requirements: Author must be credited. Commercial use is allowed.

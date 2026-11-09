@@ -345,6 +345,21 @@ external file references exactly; an omitted mesh/heightfield/texture or an unus
 declaration fails before scene compilation. The
 formal schema is ``src/mjlab/scene/schemas/scene_manifest.schema.json``.
 
+.. important::
+
+    The PLY data itself must use MuJoCo's right-handed, Z-up coordinate convention
+    with lengths in metres. Before loading, align the PLY and collision MJCF to
+    the same scene-local origin, axis directions, and scale. Otherwise, the visual
+    scene and physical collision geometry will be offset, rotated, or scaled
+    differently after loading.
+
+    ``coordinate_system`` declares the required convention; it does not convert
+    PLY coordinates or detect geometric misalignment. ``world_from_scene`` applies
+    the same rigid transform to both assets, so it cannot repair a mismatch
+    between them. Convert and align source assets during preprocessing, including
+    Gaussian orientations and scales when transforming the PLY, then update its
+    SHA-256 fingerprint in the manifest.
+
 The same manifest can be supplied to training:
 
 .. code-block:: bash

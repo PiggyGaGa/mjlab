@@ -294,7 +294,7 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
       origin_type=ViewerConfig.OriginType.ASSET_BODY,
       entity_name="robot",
       body_name="",  # Set per-robot.
-      distance=2.8,
+      distance=2.0,
       fovy=55.0,
       elevation=-5.0,
       azimuth=120.0,

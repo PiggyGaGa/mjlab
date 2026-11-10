@@ -28,6 +28,9 @@ def apply_g1_3dgs_play_cfg(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
   """Add native Viser 3DGS visualization without enabling MJWarp rendering."""
   apply_g1_3dgs_scene_cfg(cfg)
 
+  # External scene walls/obstacles need more candidates than the flat-plane budget.
+  cfg.sim.nconmax = max(cfg.sim.nconmax or 0, 256)
+
   # Group 0 contains the physical plane. Keep it active for contacts while hiding
   # it from Viser so the Gaussian scene remains visible.
   cfg.viewer.geom_group = (0, 1, 1, 0, 0, 0)

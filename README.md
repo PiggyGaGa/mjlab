@@ -99,9 +99,21 @@ the requested steps, checks finite joint positions, and closes the window.
 Add `--collision-visible` to display the collision proxy. On Linux x86_64 with
 Python 3.12 or 3.13, uv downloads the custom wheel from the MuJoCo fork's
 [v1.0 Release](https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0).
-No adjacent MuJoCo checkout or `--no-sync` is needed. These wheels require glibc
+Normal locked installation needs no adjacent MuJoCo checkout. These wheels require glibc
 2.35 or newer; other platforms and Python versions use the official MuJoCo package
 and do not provide this custom native 3DGS viewer.
+
+When a release wheel is replaced at the same URL, update it without maintaining
+the repository's wheel hash:
+
+```sh
+uv run --no-sync scripts/tools/update_mujoco_wheel.py
+uv run --no-sync tests/run_g1_3dgs_native_demo.py --interactive --collision-visible
+```
+
+The updater installs the current interpreter's wheel directly, bypassing lockfile
+hash validation. Continue using `--no-sync` afterwards: ordinary `uv sync` and
+`uv run` still enforce the lockfile, whose URL wheel hashes are mandatory in uv.
 
 To check native viewer controls, collision visibility, window cleanup, and
 runtime performance with a velocity checkpoint:

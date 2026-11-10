@@ -22,7 +22,7 @@ from mjlab.viewer import NativeMujocoViewer
 
 _MANIFEST = (
   Path(__file__).resolve().parents[1]
-  / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"
+  / "src/mjlab/asset_zoo/3dgs/apartment/manifest.json"
 )
 
 

@@ -27,6 +27,39 @@
   当前资产柱子 alpha=0.8、地面 alpha=0.2；未修改这些用户设置。该冒烟测试
   不代表长期策略稳定性或完整场景的像素级遮挡验收。
 
+## Release wheel 校验更新（2026-11-10）
+
+GitHub v1.0 的同名 cp312/cp313 wheel 已替换。本次重新下载两个完整文件，
+通过 ZIP CRC 检查并计算 SHA-256，更新 `uv.lock`；下载 URL 和版本保持不变。
+uv 使用 SHA-256，而非 MD5。
+
+- cp312（6,675,586 bytes）：
+  `1b8d11b7205a240223faefd6262dd1fa5003f554e0578b4688ea65c77e6b21fb`
+- cp313（6,680,874 bytes）：
+  `ff9e145b2a1b2e259863d51f7270e5fce42d18e31b3a6e88db20132da5b9f5f7`
+
+以上数值记录该次下载，不要求之后同名 wheel 更新时继续手工维护。
+
+## 不依赖锁文件哈希的 wheel 更新流程
+
+当前 uv 0.13.5 强制要求 `uv.lock` 的 URL wheel 具有 hash，删除字段会在解析
+锁文件时失败。`--no-verify-hashes` 是 `uv pip install` 选项，不是 `uv sync`
+的关闭开关。因此保留有效锁文件，增加独立安装工具：
+
+```sh
+uv run --no-sync scripts/tools/update_mujoco_wheel.py
+uv run --no-sync tests/run_g1_3dgs_native_demo.py --interactive --collision-visible
+```
+
+工具按当前解释器选择 cp312/cp313，使用 `uv pip install --no-verify-hashes`
+直接重装同名 Release wheel，不读取 `uv.lock` 的校验值，也不改写仓库文件。
+`--no-cache` 避免复用旧文件，`--no-deps` 保持其他依赖不变。首次环境初始化仍
+使用正常 `uv sync`；之后对反复替换的 Release 使用此工具和 `--no-sync`。
+若再次使用普通 `uv sync` 或 `uv run`，仍会恢复锁文件约束；没有宣称关闭其
+强制校验。工具支持 `--dry-run`，仅适用于 Linux x86_64、CPython 3.12/3.13。
+Ruff、ty、Pyright 和离线锁文件一致性检查通过。联网试运行未获用户允许，
+因此本次没有执行网络验证或更换已安装的 wheel。
+
 ## 场景接口
 
 场景入口仍为 schema v1 `manifest.json`。mjlab 负责校验资产指纹、依赖、
@@ -55,6 +88,19 @@ handle 的 `gaussian_status` 必须等待到 `ready`，`error:` 前缀表示加�
 资产编号改变时调用；不支持通过原地修改数组自动刷新资产。
 
 ## 状态与物理接口
+
+### 外部场景的碰撞缓存（2026-11-10）
+
+G1 3DGS tracking/velocity 回放将 `sim.nconmax` 提高到至少 256，保留用户
+设置的更大值。基础平面任务和训练配置保持原值。原 35 的容量可能在碰撞
+初筛时溢出并截断候选对；关闭 `warn_overflow` 只隐藏提示，不能恢复漏掉的
+候选。此设置同样作用于 Viser 与 native viewer 后面的 MJWarp 仿真。
+256 是回放默认余量，不保证任意复杂场景都足够；若仍溢出需按实际负载增大。
+
+验证：`tests/test_g1_3dgs_contact_capacity.py` 的 3 项配置回归通过；使用
+ArtanimMotionCaptureStudio manifest 运行 native demo 1000 步，策略步进与
+有限状态检查通过，日志没有 overflow 提示。该测试不等于所有姿态和场景的
+容量上界证明。修改文件通过 Ruff、ty 和 Pyright 检查。
 
 mjlab 的 MJWarp 环境继续负责策略和物理；native viewer 使用同一个 CPU
 `MjModel` 和用于显示的 `MjData`。每次同步选择 `env_idx` 后复制 `qpos`、

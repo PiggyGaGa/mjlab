@@ -102,6 +102,9 @@ Added
 Changed
 ^^^^^^^
 
+- Added a direct MuJoCo 3DGS wheel updater that bypasses lockfile hash validation
+  for replaced release assets. Use ``uv run --no-sync`` after updating.
+
 - Reduced the current apartment surface collision approximation to 89 boxes by
   merging scan gaps with a bounded 40 cm expansion while retaining the original
   occupied voxels and a doorway regression.
@@ -144,6 +147,9 @@ Changed
 
 Fixed
 ^^^^^
+
+- Increased G1 3DGS play contact capacity from 35 to at least 256 per world for
+  external collision scenes, preserving larger allocations and training defaults.
 
 - Fixed Viser geom alpha by submitting model geometry through the reference
   ghost's direct mesh API instead of GLB. Geoms and sites retain geometry and flat

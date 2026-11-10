@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "scene_manifest": "../../../../asset_zoo/3dgs/apartment/manifest.json",
+  "command": {
+    "resampling_time_s": [
+      8.0,
+      12.0
+    ],
+    "lin_vel_x": [
+      0.0,
+      0.8
+    ],
+    "lin_vel_y": [
+      0.0,
+      0.0
+    ],
+    "ang_vel_z": [
+      -0.6,
+      0.6
+    ]
+  },
+  "thresholds": {
+    "collision_risk_distance_m": 1.2,
+    "stop_clearance_m": 0.6,
+    "search_time_budget_s": 6.0,
+    "search_angle_budget_deg": 180.0
+  },
+  "scenarios": [
+    {
+      "id": "free",
+      "split": "train",
+      "spawn_point": "p7_free",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [],
+      "safe_exit_sectors_deg": [
+        [
+          -20.0,
+          20.0
+        ]
+      ],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "track",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    },
+    {
+      "id": "left_open",
+      "split": "train",
+      "spawn_point": "p7_left_open",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [
+        "pillar_01"
+      ],
+      "safe_exit_sectors_deg": [
+        [
+          30.0,
+          80.0
+        ]
+      ],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "brake_search_left_resume",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    },
+    {
+      "id": "right_open",
+      "split": "validation",
+      "spawn_point": "p7_right_open",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [
+        "pillar_00"
+      ],
+      "safe_exit_sectors_deg": [
+        [
+          -80.0,
+          -30.0
+        ]
+      ],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "brake_search_right_resume",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    },
+    {
+      "id": "both_open",
+      "split": "train",
+      "spawn_point": "p7_both_open",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [
+        "pillar_00",
+        "pillar_01"
+      ],
+      "safe_exit_sectors_deg": [
+        [
+          -80.0,
+          -30.0
+        ],
+        [
+          30.0,
+          80.0
+        ]
+      ],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "brake_search_either_resume",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    },
+    {
+      "id": "dead_end",
+      "split": "test",
+      "spawn_point": "p7_dead_end",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [
+        "surface_0002",
+        "surface_0003"
+      ],
+      "safe_exit_sectors_deg": [],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "brake_stop_blocked",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    },
+    {
+      "id": "false_alarm",
+      "split": "test",
+      "spawn_point": "p7_false_alarm",
+      "nominal_command": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "blocking_geoms": [],
+      "safe_exit_sectors_deg": [
+        [
+          -20.0,
+          20.0
+        ]
+      ],
+      "allowed_region_xy": [
+        -2.2,
+        2.5,
+        -5.4,
+        2.9
+      ],
+      "expected_behavior": "track_despite_visual_structure",
+      "min_clearance_m": 0.6,
+      "search_time_budget_s": 6.0,
+      "search_angle_budget_deg": 180.0,
+      "review_status": "approved"
+    }
+  ]
+}

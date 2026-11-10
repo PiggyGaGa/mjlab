@@ -186,6 +186,26 @@ uv run tests/run_g1_3dgs_vision_smoke.py --num-envs 2 \
   --output /tmp/p6-vision-smoke
 ```
 
+To inspect the two camera-visible apartment pillars against the 3DGS wall, keep
+the robot at the manifest's ``default`` spawn, which has the same transform as
+``p7_both_open``:
+
+```bash
+uv run --no-sync tests/run_g1_3dgs_vision_smoke.py \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/apartment/manifest.json \
+  --fixed-base-pose \
+  --validity-mask \
+  --depth-metrics \
+  --width 640 \
+  --height 480 \
+  --output /tmp/p6-apartment-pillars
+```
+
+Compare ``reset-env0-rgb.png``, ``reset-env0-raw-depth.png``,
+``reset-env0-policy-depth.png``, and ``reset-env0-validity.png`` under
+``/tmp/p6-apartment-pillars``. The fixed-pose option disables reset-time
+``x``/``y``/yaw offsets so the pillar view remains reproducible.
+
 Add `--depth-metrics` to record raw missing, near, far, and in-range fractions
 for every world and rollout step in `rollout_depth.json`. The report summarizes
 these fractions and done counts; sampling includes auto-reset frames and adds

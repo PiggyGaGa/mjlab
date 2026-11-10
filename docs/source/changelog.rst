@@ -8,6 +8,18 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added an isolated ``Mjlab-Velocity-Safe-Unitree-G1-3DGS`` task skeleton and a
+  versioned apartment scenario catalog for P7. The task reuses the existing G1
+  joint action, body-frame velocity command, and robust temporal depth+validity
+  observation without changing existing velocity tasks. Six deterministic spawn
+  fixtures cover free, left/right/both-open, dead-end, and false-alarm review cases.
+  A task-local deterministic depth adapter supplies braking, fixed-direction search,
+  blocked stopping, recovery, intervention diagnostics, and nine mutually exclusive
+  episode outcomes without adding localization inputs to the actor. The runnable
+  ``Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS`` baseline consumes camera depth
+  inside a task-local observation term and feeds a safe twist to a standard blind
+  G1 MLP, keeping raw images outside the policy observation.
+
 - Added an apartment scene collision approximation generated from Gaussian
   centres, with a ground slab, voxel surface boxes, and a rebuild script. Two
   opaque camera-visible pillars provide matched visual and collision geometry for

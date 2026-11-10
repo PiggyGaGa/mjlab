@@ -1,9 +1,10 @@
 # P7：3DGS 安全感知速度跟踪需求
 
-最后更新：2026-11-09
+最后更新：2026-11-10
 
-状态：需求基线已按无定位传感器约束重构；运行时代码、训练和效果验收
-尚未开始。
+状态：P7-0 场景协议和 P7-1 独立任务骨架已完成；P7-2 的九类 outcome
+判定、规则 depth adapter 核心及真实环境 observation 接入已实现，P7 专用奖励、
+轨迹效果验收和训练尚未完成。
 
 ## 1. 目的
 
@@ -147,6 +148,13 @@ collision MJCF、spawn metadata、地面、墙体代理和两个同时可见且�
 
 scenario catalog 必须进入版本控制。初版先建立固定列表和确定性回归，再在
 列表限定范围内随机采样。
+
+实现记录（2026-11-10）：新增版本化 `p7_scenarios.json`，记录六类 scenario、
+split、manifest spawn、nominal command、碰撞 geom、安全出口扇区、允许区域、
+最小净空、搜索预算和预期行为。apartment manifest 新增六个 `p7_*` 命名出生点。
+2026-11-10 用户已完成六类场景的交互检查，所有 `review_status` 更新为
+`approved`。这表示出生方向、视觉/碰撞和安全出口协议可以作为 P7 首版固定
+夹具；当前净空和搜索阈值仍需在实际制动实验中继续标定。
 
 ### P7-FR-3：数据划分
 
@@ -407,6 +415,24 @@ deterministic adapter 至少实现“制动—原地旋转—选取最大安全�
 
 退出条件：固定 scenario 可重复加载，视觉/碰撞和安全出口人工检查通过。
 
+完成（2026-11-10）：catalog、六个 manifest spawn、命令初值、split 和结构化
+校验已实现；六类场景可由配置工厂重复加载，并已完成人工视觉/碰撞/安全出口
+确认。风险距离、停车净空和搜索预算保留为 P7-2/P7-3 的可复现实验参数，后续
+标定必须版本化修改，不能静默改变已记录实验。
+
+人工预览可先使用零动作策略和现有 Play 入口，例如：
+
+```sh
+uv run play Mjlab-Velocity-Safe-Unitree-G1-3DGS \
+  --agent zero \
+  --scene-manifest src/mjlab/asset_zoo/3dgs/apartment/manifest.json \
+  --scene-spawn-point p7_left_open \
+  --viewer native
+```
+
+将最后一个参数依次替换为六个 catalog `spawn_point`。该命令只用于初始视觉、
+碰撞和方向检查，零动作机器人会跌倒，不能用作行为验收。
+
 ### P7-1：安全速度跟踪任务骨架
 
 - 增加独立 P7 task id，复用现有 velocity command 和 joint action。
@@ -415,6 +441,14 @@ deterministic adapter 至少实现“制动—原地旋转—选取最大安全�
 
 退出条件：单/多 environment 可确定性 reset/step，不要求策略收敛。
 
+完成（2026-11-10）：已注册独立任务
+`Mjlab-Velocity-Safe-Unitree-G1-3DGS`。它复用 P6 robust temporal
+depth+validity、asymmetric critic、`UniformVelocityCommand` 和 G1 joint
+position action；关闭 heading/world command，移除 push event，使用 12 m
+world spacing，并只在该任务加载 apartment manifest。1/2 environment 的
+reset/step 定向测试通过，已有 G1 velocity 默认配置回归通过。P7-1 只证明
+任务骨架和隔离边界，不表示奖励或避障效果已经完成。
+
 ### P7-2：奖励、outcome 与规则基线
 
 - 实现安全优先的奖励、九类 outcome 和结构化指标。
@@ -422,6 +456,35 @@ deterministic adapter 至少实现“制动—原地旋转—选取最大安全�
 - 用脚本轨迹验证制动、搜索、恢复和 dead-end 停车语义。
 
 退出条件：全部 outcome 可确定性触发，规则基线可完成基础左右避障。
+
+2026-11-10 进度：新增任务局部 `P7DeterministicDepthAdapter`，消费归一化
+depth+validity，将视野分为左/前/右扇区，输出 track、brake、stop、search、
+resume、blocked 模式和安全 twist。它支持单帧/时序输入、无效深度保守停车、
+固定搜索方向、搜索超时、恢复限速、介入计数和完全关闭时的精确 passthrough。
+新增安全优先级固定的九类 `P7Outcome` 判定，并用合成深度/状态测试覆盖左右
+选向、dead-end timeout、恢复和全部 outcome。
+
+新增 `Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS` 注册任务，将 Warp camera 的
+原始深度在任务局部 observation term 中转换为 depth+validity，再由 adapter
+生成 3 维安全速度命令。相机仍在 scene 中更新，但 camera group 不进入 blind
+actor；actor 保持标准 G1 MLP observation/action 接口，可加载维度兼容的既有
+velocity checkpoint。真实 1/2 environment reset/step 验证了安全命令确实进入
+actor observation，且未修改通用 manager、command、sensor 或 velocity MDP。
+P7 专用奖励、真实轨迹 outcome、checkpoint 场景 rollout 和基础左右避障效果
+验收仍未完成，因此 P7-2 保持进行中。
+
+定向验证覆盖 adapter、catalog/config、apartment manifest 和现有 velocity task，
+结果为 `46 passed`；新增文件的 Ruff、ty 和 Pyright 检查通过。
+
+2026-11-10 人工 rollout：标准 G1 velocity checkpoint
+`logs/rsl_rl/g1_velocity/2026-10-24_16-15-47/model_29999.pt` 可由 adapter 任务
+正常加载和运行，证明 99 维 blind actor 接口与既有 locomotion policy 兼容。
+人工运行多个 apartment 出生点时未观察到碰撞，但 `p7_left_open` 和
+`p7_right_open` 基本不恢复平移，因此不能判定左右避障通过。当前待验证原因
+包括出生点已接近风险阈值、向下相机视野中的近地深度影响保守分位数，以及
+搜索后前方净空未达到恢复阈值。下一步先记录 adapter mode、三扇区净空、
+valid ratio、nominal/adapted command 和搜索时间，再据此标定 ROI、出生距离及
+制动/恢复阈值；不能仅因没有碰撞就关闭 P7-2。
 
 ### P7-3：blind 与 privileged 基线
 

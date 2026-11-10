@@ -16,6 +16,7 @@ VOXEL_SIZE = 0.1
 FLOOR_Z = 0.0
 MIN_BOX_FILL = 0.20
 MAX_SURFACE_EXPANSION = 0.4
+MIN_SURFACE_BOX_VOLUME = 0.1  # Cubic metres, using full box dimensions.
 VISIBLE_PILLARS = (
   ((1.6, -0.45, 0.8), (0.90, 0.20, 0.10, 1.0)),
   ((1.6, 0.45, 0.8), (0.10, 0.40, 0.90, 1.0)),
@@ -69,6 +70,17 @@ def merge_surface_boxes(occupied: np.ndarray) -> list[tuple[np.ndarray, np.ndarr
 
   partition(np.argwhere(occupied))
   return boxes
+
+
+def prune_small_surface_boxes(
+  boxes: list[tuple[np.ndarray, np.ndarray]],
+) -> list[tuple[np.ndarray, np.ndarray]]:
+  """Discard small merged fragments; retained boxes keep their original bounds."""
+  return [
+    (start, end)
+    for start, end in boxes
+    if np.prod(end - start) * VOXEL_SIZE**3 >= MIN_SURFACE_BOX_VOLUME - 1e-12
+  ]
 
 
 def main() -> None:
@@ -146,7 +158,8 @@ def main() -> None:
       rgba=" ".join(f"{value:.2f}" for value in rgba),
     )
 
-  boxes = merge_surface_boxes(occupied)
+  merged = merge_surface_boxes(occupied)
+  boxes = prune_small_surface_boxes(merged)
   for box_count, (start, end) in enumerate(boxes):
     centre = lower + (start + end) * VOXEL_SIZE / 2
     half_size = (end - start) * VOXEL_SIZE / 2
@@ -159,6 +172,7 @@ def main() -> None:
   manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
   print(f"Bounds: {lower} to {upper}; floor z={FLOOR_Z}")
   print(f"Merged {voxel_count} occupied voxels into {len(boxes)} surface boxes")
+  print(f"Discarded {len(merged) - len(boxes)} boxes below {MIN_SURFACE_BOX_VOLUME} m³")
 
 
 if __name__ == "__main__":

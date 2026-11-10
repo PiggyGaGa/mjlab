@@ -135,9 +135,11 @@ P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前�
 - 已提供 room1 地面与六柱碰撞资产及基于标准 demo policy 的人工
   Play 冒烟脚本。
 - 已提供 apartment 场景专用碰撞生成脚本：将 20,468 个占据 voxel 合并为
-  89 个静态表面 box，并生成地面及两个相机可见且具碰撞的柱体，导出
+  89 个静态表面 box，再删除体积小于 0.1 m³ 的 53 个碎片，保留 36 个；
+  地面及两个相机可见且具碰撞的柱体不参与体积过滤，导出
   collision-only MJCF。该脚本包含 apartment 专用范围、地面和障碍设定，
-  不代表已实现跨场景或语义碰撞生成。
+  不代表已实现跨场景或语义碰撞生成。过滤后不再保证覆盖所有原占据 voxel，
+  小型真实表面也可能被移除，接触敏感用途仍需检查碰撞叠加效果。
 - 已提供 schema v1 scene manifest，将 PLY、collision MJCF、坐标约定、
   统一 transform 和 spawn-point metadata 绑定为一个入口；
   train/play/demo 均可加载。
@@ -414,6 +416,20 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 
   Sphinx 构建成功。该证据只验证 requirements/changelog 格式与交叉口径，
   不表示 P7 MDP、策略或训练已经实现。
+- [x] 2026-11-10 apartment 体积阈值进一步提高到 0.1 m³（替代下述初版）：
+  从初版 68 个表面 box 中再删除 32 个，剩余 36 个；脚本同步调整
+  `MIN_SURFACE_BOX_VOLUME`，恰好等于阈值的 box 保留。地板、两个柱体、
+  保留 geom 的尺寸/位置/属性及默认透明度不变。MuJoCo CPU 编译
+  39 个 geom 成功。专项测试 `4 passed`，Ruff 格式/检查及定向 ty 通过。
+  体积过滤可能删除真实小表面，仍需在 viewer 中检查局部碰撞缺口。
+- [x] 2026-11-10 apartment 小 box 过滤初版验证（后续阈值已提高）：
+  `uv run --no-sync pytest -q tests/test_apartment_collision.py` 为 `4 passed`；
+  覆盖碎片删除、阈值边界保留及原有合并回归。Ruff 格式/检查、定向 ty 和
+  `git diff --check` 通过。当前 XML 删除 21 个小于 0.01 m³ 的表面 box，
+  剩余 68 个；所有保留 geom 属性及默认透明度保持原样。MuJoCo CPU 编译
+  71 个 geom 成功，出生点上方 (0, 0, 1) 六方向射线均命中场景边界。
+  联合 manifest 测试为 `14 passed, 1 failed`，失败来自未修改的 Studio
+  柱体 alpha=0.8 与旧测试要求 1.0 不一致；本次未调整该场景。
 - [x] 2026-11-09 运行：
 
   ```sh

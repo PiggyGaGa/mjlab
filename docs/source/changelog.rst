@@ -102,6 +102,10 @@ Added
 Changed
 ^^^^^^^
 
+- Removed apartment surface collision boxes below 0.1 cubic metres, reducing
+  their count from 89 to 36. The rebuild script applies the same cutoff; the
+  ground slab and explicit pillars are preserved.
+
 - Added a direct MuJoCo 3DGS wheel updater that bypasses lockfile hash validation
   for replaced release assets. Use ``uv run --no-sync`` after updating.
 

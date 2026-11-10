@@ -45,3 +45,16 @@ def test_surface_merging_preserves_doorway_and_coverage() -> None:
 
 def test_empty_surface_has_no_boxes() -> None:
   assert _generator.merge_surface_boxes(np.zeros((3, 3, 3), dtype=bool)) == []
+
+
+def test_pruning_removes_fragments_but_preserves_thin_wall_at_threshold() -> None:
+  origin = np.zeros(3, dtype=int)
+  fragment = (origin, np.array([1, 9, 11]))  # 0.099 m³.
+  thin_wall = (origin, np.array([1, 10, 10]))  # Exactly 0.1 m³.
+  large_wall = (origin, np.array([1, 30, 30]))
+
+  result = _generator.prune_small_surface_boxes([fragment, thin_wall, large_wall])
+
+  assert len(result) == 2
+  assert all(np.array_equal(a, b) for a, b in zip(result[0], thin_wall, strict=True))
+  assert all(np.array_equal(a, b) for a, b in zip(result[1], large_wall, strict=True))

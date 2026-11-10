@@ -145,6 +145,11 @@ Changed
 Fixed
 ^^^^^
 
+- Fixed Viser geom alpha by submitting model geometry through the reference
+  ghost's direct mesh API instead of GLB. Geoms and sites retain geometry and flat
+  colours; textures and PBR appearance are omitted. Added a client rebuild tool
+  to render Gaussian splats before transparent meshes for collision overlays.
+
 - G1 3DGS depth observations now map missing zero-depth samples to the far cutoff
   instead of presenting them as nearby obstacles. Other camera-depth tasks retain
   their default behavior. Added analytic depth tests and robot/splat diagnostics.

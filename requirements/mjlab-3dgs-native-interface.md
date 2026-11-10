@@ -3,6 +3,30 @@
 接口版本：1；验证日期：2026-10-30；对应 MuJoCo Release：
 `https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0`。
 
+## Native 半透明叠加更新（2026-11-10，本地源码）
+
+- 外部 MuJoCo 仓库的经典渲染器新增可选透明阶段前回调，native viewer
+  使用“不透明几何/背景 → 3DGS → 半透明 geom/mesh → 标签/UI”的顺序。
+  原 `mjr_render()` 保持空回调；不改透明分类阈值或物理碰撞。
+- 这是碰撞调试覆盖层，不保证透明 mesh 与 Gaussian 的逐片元联合排序。
+  立体、正交和 scene transform 等原有 3DGS 限制仍在。
+- `simulate` 及新增 `mjgs_transparency_test` 编译通过。OpenGL 4.6 NVIDIA
+  实测 alpha=0.1/0.5/1 的真实 mesh 混合通过；隐藏/无资产时逐像素等同
+  原始渲染；segmentation 不调用外部颜色绘制；截图包含完整透明阶段。
+- 原有 `mjgs_render_test` 的遮挡、viewport 偏移、显示切换、GL 状态和空视锥
+  回归通过；`mjgs_asset_test`、`mjgs_lifecycle_test` 均通过。
+- 以上属于本地修复，不代表 GitHub v1.0 Release 已包含变更。mjlab 必须使用
+  由修改后源码构建的 wheel；安装后用 `uv run --no-sync` 保留本地构建版本。
+- 已用 GCC 11 构建并安装 Python 3.13 本地 wheel：
+  `mujoco/dist/mujoco-3.16.0+3dgs-cp313-cp313-manylinux_2_35_x86_64.whl`。
+  安装库导出透明阶段回调；`tools/test_python_3dgs.py --gpu` 的两个窗口均完成
+  加载、重载、关闭及临时 PLY 清理。未重新发布远端 wheel。
+- Native demo 默认测试入口改为 ArtanimMotionCaptureStudio manifest。已运行
+  `uv run --no-sync tests/run_g1_3dgs_native_demo.py --steps 200 --collision-visible`：
+  3DGS renderer ready、预训练 G1 策略 200 步及有限状态检查通过。
+  当前资产柱子 alpha=0.8、地面 alpha=0.2；未修改这些用户设置。该冒烟测试
+  不代表长期策略稳定性或完整场景的像素级遮挡验收。
+
 ## 场景接口
 
 场景入口仍为 schema v1 `manifest.json`。mjlab 负责校验资产指纹、依赖、

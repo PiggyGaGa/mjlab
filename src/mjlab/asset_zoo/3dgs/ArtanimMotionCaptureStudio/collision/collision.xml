@@ -6,7 +6,7 @@
       conaffinity="1"
       condim="3"
       friction="1.0 0.005 0.0001"
-      rgba="0.15 0.75 0.25 1"
+      rgba="0.15 0.75 0.25 0.8"
     />
   </default>
 

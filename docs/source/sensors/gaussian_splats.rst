@@ -327,6 +327,31 @@ contact sensors continue to recognize it. ``TerrainHeightSensorCfg`` instances a
 automatically redirected to ``mjcf_geom_group``; this keeps foot-height observations
 on the external collision surface instead of the removed plane.
 
+Viser transparent collision overlays
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Viser model geometry uses the same direct mesh API as reference-motion ghosts:
+vertices, triangle indices, flat RGB colours, and explicit opacity. Fixed and
+batched dynamic geoms and sites do not serialize or parse GLB. Faces with different
+RGBA colours are submitted separately; texture maps and PBR appearance are replaced
+by flat colours. Geometry and transforms remain intact. To composite transparent
+meshes over Gaussian splats with the currently supported Viser client, rebuild its
+browser bundle once per environment:
+
+.. code-block:: bash
+
+    uv run scripts/tools/build_viser_transparency.py
+
+This requires Node.js 24 or later, npm, and network access to install frontend
+build dependencies. Restart the viewer and reload the browser afterwards. Re-run
+after reinstalling Viser. The tool fails if the installed client source no longer
+matches the supported render-order patch.
+
+The resulting order is opaque meshes, Gaussian splats, then transparent meshes.
+This supports collision debugging overlays; it does not jointly sort Gaussians
+and transparent mesh fragments. Transparent geometry behind a Gaussian wall may
+remain visible. Physical collisions are unaffected by visualization alpha.
+
 For ``play`` or ``demo``, prefer the versioned manifest:
 
 .. code-block:: bash

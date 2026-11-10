@@ -17,6 +17,30 @@ Play 与训练是两个不同模块和执行流程：
 
 ## 2. 前端范围
 
+### 半透明碰撞调试（2026-11-10）
+
+- 按用户选择，模型几何统一采用参考动作的直接 mesh 接口，不导出 GLB。
+  mjlab 在 Viser 适配边界将 mjviser 几何提交转为顶点、三角面、RGB、opacity。
+  固定、批量动态 geom 和 site 以及可视化重建均使用此路径；继续复用原有
+  分组、实例复用、每世界变体和位置更新逻辑。
+- 不同 RGBA 的面分组提交并共享变换、显隐及移除操作。不透明部分使用
+  `opacity=None`，半透明部分显式传 alpha。纹理和 PBR 外观按本次选择不保留，
+  纹理模型采用材质基色；几何和场景坐标不变。移除之前的 GLB 修补逻辑。
+- 当前 Viser 1.0.27 没有公开的绘制顺序配置。使用可复现客户端构建工具：
+  `uv run scripts/tools/build_viser_transparency.py`。
+  需要 Node.js >=24、npm 和首次构建时的网络访问。工具在临时目录构建，
+  成功后原子替换当前环境的 Viser 单文件浏览器 bundle，不改 Python 依赖源码。
+  Viser 升级或重新安装后需要重新构建；源码特征不匹配时工具拒绝应用补丁。
+- 客户端顺序为：不透明 mesh → 3DGS → 半透明 mesh → UI。
+  这是碰撞调试覆盖层，不是 Gaussian 和 mesh 的联合透明排序；隐藏在
+  Gaussian 墙后的透明 mesh 仍可能显示。细粒度真实遮挡仍待实现。
+- 验证包含 XML alpha 传递、固定/动态 geom 与 site 全程禁止 GLB 导出、
+  多色/透明度分组、纹理材质基色转换、批量变换更新和现有 Viser 更新策略回归。
+  31 项定向测试及 2 项 Viser 变体回归通过；浏览器像素级验证确认
+  alpha=0.1/0.5 呈现不同颜色，
+  且后方 3DGS 保持可见。详见
+  `validation/viser-transparency-2026-11-10.md`。
+
 本仓库只实现基于 Viser 的 3DGS Play 界面。
 
 MuJoCo viewer/simulate 的 3DGS 界面已经在外部仓库实现，不属于本仓库

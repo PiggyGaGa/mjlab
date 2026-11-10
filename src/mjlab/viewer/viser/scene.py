@@ -34,6 +34,7 @@ from mjlab.viewer.model_sync import (
   disable_model_sameframe_shortcuts,
   sync_model_fields,
 )
+from mjlab.viewer.viser.simple_mesh import SimpleMeshServer
 
 _Z_AXIS = np.array([0.0, 0.0, 1.0])
 _IDENTITY_QUAT = np.array([1.0, 0.0, 0.0, 0.0])
@@ -259,7 +260,9 @@ class MjlabViserScene(ViserMujocoScene, DebugVisualizer):
         0,
       )
       disable_model_sameframe_shortcuts(mj_model)
-    super().__init__(server, mj_model, num_envs)
+    super().__init__(
+      cast(viser.ViserServer, SimpleMeshServer(server)), mj_model, num_envs
+    )
     self._baked_appearance_fingerprint = self._appearance_fingerprint()
     if geom_groups_visible is not None:
       self.geom_groups_visible = [bool(value) for value in geom_groups_visible]

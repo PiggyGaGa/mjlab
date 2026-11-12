@@ -131,13 +131,21 @@ not attribute pixels to robot occlusion. CPU diagnostic sampling is included in
 the reported runtime and should be disabled for performance benchmarks.
 
 The installed renderer outputs axial camera Z-depth in meters. Gaussian depth
-is assigned at the splat where accumulated transmittance falls below 0.005;
-it is not expected depth or the nearest Gaussian center. If no mesh is hit and
-that opacity threshold is not reached, the result is zero. G1 enables
-``camera_depth(..., zero_depth_as_far=True)`` to map those missing values to
-the far cutoff before normalization. The default for other tasks is unchanged.
-Missing depth and valid depth beyond the cutoff are then indistinguishable;
-the encoding does not prove free space or eliminate holes in the reconstruction.
+is assigned at the splat where accumulated transmittance falls below
+``splat_depth_transmittance_threshold``; it is not expected depth or the nearest
+Gaussian center. The locked MuJoCo Warp fork exposes this setting through
+``create_render_context`` and defaults it to ``0.1``, corresponding to 90% accumulated
+opacity. The value must be strictly between zero and one. A lower value requires
+more accumulated opacity before recording depth and can therefore produce more
+zero-depth holes; a higher value records an earlier surface along the ray.
+
+If no mesh is hit and the threshold is not reached, the result is zero. G1 enables
+``camera_depth(..., zero_depth_as_far=True)`` to map those missing values to the far
+cutoff before normalization. The default for other tasks is unchanged. Missing
+depth and valid depth beyond the cutoff are then indistinguishable; the encoding
+does not prove free space or eliminate holes in the reconstruction. Changing the
+threshold changes the policy observation distribution, so existing visual
+checkpoints must be revalidated before results are compared.
 
 Supported PLY format
 --------------------

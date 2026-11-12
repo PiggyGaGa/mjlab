@@ -13,12 +13,39 @@ Added
   joint action, body-frame velocity command, and robust temporal depth+validity
   observation without changing existing velocity tasks. Six deterministic spawn
   fixtures cover free, left/right/both-open, dead-end, and false-alarm review cases.
+  The frozen, typed ``safe_velocity_scenarios.py`` catalog avoids runtime JSON
+  parsing while preserving the existing task and scenario identifiers.
   A task-local deterministic depth adapter supplies braking, fixed-direction search,
   blocked stopping, recovery, intervention diagnostics, and nine mutually exclusive
   episode outcomes without adding localization inputs to the actor. The runnable
   ``Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS`` baseline consumes camera depth
   inside a task-local observation term and feeds a safe twist to a standard blind
-  G1 MLP, keeping raw images outside the policy observation.
+  G1 MLP, keeping raw images outside the policy observation. A privileged,
+  task-local trajectory evaluator now reduces world pose, fall state, adapter
+  events, and G1 pelvis contacts with any non-ground scene collision geometry to
+  one safety-first outcome and records path length, sensor clearance, contact
+  force, and contact impulse. Task-local reward shaping now tracks the adapter's
+  depth-conditioned safe twist instead of penalizing braking or search against an
+  unsafe nominal command, and separately penalizes pelvis-obstacle contacts.
+  A finite-budget acceptance runner evaluates the six catalog scenarios over
+  multiple seeds, checks their expected continuous-tracking, avoidance-resume, or
+  safe-blocked-stop outcomes, and can fail the command on any mismatch.
+  Renderer-free blind and privileged learning tasks provide the first P7 learning
+  baselines. The blind task retains the standard G1 MLP observation, while the
+  explicitly non-deployable privileged task adds a pelvis-frame, nine-ray local
+  collision-geometry fan. Its stateless reward target passes through the nominal
+  command in clear space, but zeros all linear and angular command components when
+  any front ray is invalid or detects an obstacle within 1.2 m. It does not search,
+  turn, or resume around the obstacle; the deterministic adapter remains the
+  separate rule-based avoidance baseline.
+  Safe-velocity tasks also keep their frozen forward-only command range instead of
+  inheriting the generic G1 command curriculum, which includes reverse motion.
+  A checkpoint conversion utility warm-starts either learning baseline from an
+  existing G1 locomotion actor while leaving the task-specific critic and optimizer
+  freshly initialized. These warm-started tasks use conservative, fixed exploration
+  noise and lower-intensity PPO updates to avoid destroying the pretrained gait.
+  Privileged collision-ray misses are treated as known free space up to the ray
+  cutoff, rather than as invalid camera-depth samples.
 
 - Added an apartment scene collision approximation generated from Gaussian
   centres, with a ground slab, voxel surface boxes, and a rebuild script. Two
@@ -113,6 +140,19 @@ Added
 
 Changed
 ^^^^^^^
+
+- Added structured P7 adapter rollout diagnostics for mode transitions, sector
+  clearance and validity, nominal/adapted commands, search time, and base motion.
+  The deterministic baseline now starts searching at a separately configured
+  1.0 m threshold while retaining 0.6 m as the minimum-clearance target, and its
+  catalog search budget is 18 seconds based on six-scenario, three-seed traces.
+
+- Updated the locked MuJoCo Warp fork to expose
+  ``create_render_context(..., splat_depth_transmittance_threshold=0.1)``. Gaussian
+  depth recording is now configurable independently of RGB compositing; the new
+  default records depth after 90% accumulated opacity. Existing visual checkpoints
+  and depth-quality measurements made with the previous fixed ``0.005`` threshold
+  require revalidation.
 
 - Removed apartment surface collision boxes below 0.1 cubic metres, reducing
   their count from 89 to 36. The rebuild script applies the same cutoff; the

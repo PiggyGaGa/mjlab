@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-11-10
+最后更新：2026-11-12
 
 ## 0. 项目总览
 
@@ -15,7 +15,7 @@
 | P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 接收 P8 后续泛化资产作替换对照 |
 | P5 | 统一场景资产 | **完成** | 为 P7/P8 提供稳定场景契约 |
 | P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
-| P7 | 3DGS 安全感知速度跟踪 | P7-0/P7-1 完成；P7-2 进行中 | 诊断左右场景恢复停滞，再增加奖励与轨迹验收 |
+| P7 | 3DGS 安全感知速度跟踪 | P7-0/P7-1/P7-2 完成；P7-3 进行中 | 重新训练并验收 privileged 遇障停车基线 |
 | P8 | 自动碰撞生成 | apartment 场景专用几何原型完成 | 泛化几何算法、可替换语义前端与质量评估 |
 | P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
@@ -96,7 +96,7 @@ P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前�
 文档为准：
 
 - `mjlab-3dgs-training.md`：训练、碰撞和视觉闭环需求；
-- `mjlab-3dgs-p7-safe-velocity.md`：P7 安全感知速度跟踪的任务与验收契约；
+- `mjlab-3dgs-safe-velocity.md`：P7 安全感知速度跟踪的任务与验收契约；
 - `mjlab-3dgs-play-viser.md`：独立 Play 与 Viser 需求；
 - `mjlab-3dgs-research.md`：调研范围与论文证据要求；
 - `mjlab-3dgs-research-report.md`：已有工作和第一轮调研结论。
@@ -236,15 +236,16 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 
 仍需正式验证：
 
-- [x] 记录当前 splat depth 为相机轴向 Z-depth：累计 transmittance 低于
-  ``0.005`` 时写入对应 Gaussian 深度，未命中 mesh 且未达到阈值时返回零；
-  文档同时说明其不是期望/最近点深度、零值孔洞及远端映射限制。
-- [ ] 后续优化（不阻塞 P6/P7）：评估将 MuJoCo Warp 的 3DGS RGB
-  合成终止阈值与 depth 表面判定阈值解耦。当前保持
-  ``transmittance < 0.005`` 的既有深度语义以及 depth + validity 输入，
-  不修改已安装依赖。若后续实施，应优先向 MuJoCo Warp 提供默认行为兼容的
-  可选参数，并构建、锁定独立 wheel；同时比较孔洞率、漂浮点误检、
-  RGB/depth 对齐、渲染吞吐及已有 checkpoint 的观测分布变化。
+- [x] 记录 splat depth 为相机轴向 Z-depth；它不是期望/最近点深度，未命中
+  mesh 且累计 opacity 未达到阈值时返回零。2026-10-30 的验收使用旧后端固定的
+  ``transmittance < 0.005`` 语义，作为历史证据保留。
+- [x] 2026-11-11 锁定 MuJoCo Warp fork ``8ffab7a5``。其
+  ``create_render_context`` 已通过 ``splat_depth_transmittance_threshold`` 将
+  depth 表面判定与 RGB 合成终止条件解耦，默认值为 ``0.1``，并校验严格位于
+  ``(0, 1)``。mjlab 当前沿用上游默认值，没有增加本地兼容层。
+- [ ] 在当前默认阈值 ``0.1`` 下重新比较孔洞率、漂浮点误检、RGB/depth
+  对齐、渲染吞吐及已有 checkpoint 的观测分布；旧 ``0.005`` 验收结果不得
+  直接作为新默认值的质量证据。
 - [ ] 验证不同相机数量、分辨率和更新频率下的显存及吞吐。
 - [x] 当前 1/2/4-world P6 视觉 rollout 与 PPO 更新已在仿真 CUDA graph
   启用时通过；更多相机、分辨率和更新频率组合仍归入性能矩阵。
@@ -823,7 +824,7 @@ P7 的首要目标是：G1 根据 nominal velocity command、本体状态和时�
 但不声称复现其算法。
 
 P7 的详细任务、接口、指标和完成条件以
-`mjlab-3dgs-p7-safe-velocity.md` 为准。本节只跟踪项目进度，不能替代该
+`mjlab-3dgs-safe-velocity.md` 为准。本节只跟踪项目进度，不能替代该
 需求契约。
 
 ### N0. 首个安全速度跟踪任务
@@ -860,11 +861,15 @@ P7 的详细任务、接口、指标和完成条件以
   恢复”的可解释基线。
 - [x] 实现规则 adapter 的任务局部纯逻辑与九类 outcome 判定：支持制动、
   停车、固定方向搜索、恢复、dead-end timeout、无效深度保守处理、关闭时
-  passthrough 和介入计数。
+  passthrough 和介入计数。任务局部轨迹 evaluator 已接入世界边界、跌倒和
+  `pelvis` base-link 对所有非地面场景 geom 的障碍接触，并以脚本轨迹确定性
+  触发全部九类 outcome。
 - [x] 注册 `Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS`，在任务局部
   observation term 中读取 Warp camera depth 并向标准 blind G1 MLP 注入安全
   twist；camera 不进入 actor observation，真实 reset/step 接入测试通过。规则
-  基线的 checkpoint 场景 rollout 与左右避障效果验收仍未完成。
+  基线已用既有 checkpoint 完成六场景 × seed 0/1/2 的正式规则验收：18/18
+  outcome 符合 catalog，均无 base-link 障碍接触和跌倒，最小前向传感净空
+  0.792 m。该指标不是精确 geometry 净空，学习策略效果仍归 P7-3/P7-4。
 - [ ] 通过关闭、冻结或错配视觉，以及改变障碍布局的测试，验证视觉依赖；
   不因机器人能在平地跟踪速度就宣称策略学会了视觉避障。
 - [ ] 报告 free-space 跟踪误差、碰撞/跌倒率、制动距离、停止净空、左右
@@ -1048,6 +1053,100 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 
 ## 14. 更新记录
 
+- 2026-11-12：启动 P7-3。新增 renderer-free blind 与 privileged local-geometry
+  task，均复用冻结 apartment collision、标准 G1 joint action 和 MLP PPO。blind
+  保持 99/109 维 observation，不创建 Gaussian asset/camera；privileged 用
+  `pelvis` 机体系 9 条 collision-truth 射线向 actor/critic 各增加 18 维距离/
+  有效位，并用同一局部几何构造安全 tracking target。两个 task 的 2-env CPU
+  1-update smoke 均通过，分别为 33/31 SPS，loss 有限。正式训练预算、标准 G1
+  checkpoint warm-start、free tracking 和多场景局部避障效果尚未验收，P7-3
+  保持进行中。
+- 2026-11-12：P7-3 首轮 64-env GPU 吞吐探针发现通用 G1 `command_vel`
+  curriculum 会在首次 reset 覆盖 safe-velocity catalog 的 `0.0--0.8 m/s`
+  forward-only 命令。现已仅在 safe-velocity 任务中关闭该 curriculum，保证各
+  P7 基线遵守冻结 command protocol；普通 G1 velocity task 不变。修正前探针
+  仅用于发现配置问题，不计入正式训练结果。
+- 2026-11-12：为 P7-3 新增 locomotion actor warm-start 转换工具。blind 复制
+  标准 99 维 actor；privileged 复制前 99 维并将新增 18 维局部几何输入权重
+  置零；critic 和 optimizer 保持新初始化。两种 checkpoint 均已严格 resume
+  并完成一次有限 loss 的 CPU PPO update。首轮正式预算冻结为 64 environments、
+  1000 updates、seed 42，由用户依次训练后返回结果验收。
+- 2026-11-12：Blind 首轮 1000-update 微调失败：最终平均回报约 `-76.95`，线速
+  跟踪奖励接近零，策略无法站稳、向前行走且不规则后退。warm-start actor 与
+  来源 checkpoint 逐参数一致，退化仅发生在 PPO 微调后。现将 Blind/Privileged
+  的任务局部微调设置改为固定 `0.15` 动作标准差、`1e-4` 学习率、零 entropy
+  coefficient 和每轮 2 learning epochs；普通 G1 runner 不变。首轮 checkpoint
+  作废。修正配置已完成 5-update CPU resume smoke，动作标准差稳定在 `0.15`，
+  loss 有限；下一步先运行 100-update GPU 校准和 deterministic playback，再继续
+  正式对照。
+- 2026-11-12：Blind 保守配置的 100-update GPU 校准完成，`model_99.pt` 的
+  deterministic playback 可以站稳，动作标准差保持 `0.15`；但最后 20 updates
+  平均回报约 `-41.42`、线速度 tracking reward 约 `0.0025`，训练采样仍主要因
+  跌倒结束。该模型尚未通过 free tracking，不扩展到 1000 updates；先确认是否
+  实际向前跟踪，再决定冻结原 locomotion actor 或继续微调。
+- 2026-11-12：用户确认 Blind `model_99.pt` 的 deterministic playback 能站稳且
+  向前行走。该模型冻结为候选 Blind baseline，不再追加 PPO updates；后续仍需
+  结构化 free rollout 量化跟踪误差和终止状态，且不把它解释为避障策略。
+- 2026-11-12：Privileged 保守配置完成 100-update GPU 校准。动作标准差固定为
+  `0.15`，但最后 20 updates 平均回报约 `-46.76`、timeout 比例约 `0.018`，训练
+  采样仍主要跌倒；新增几何输入首层权重虽从零更新，L2 norm 仅约 `0.026`。
+  需先回放 both-open 检查真实避障行为，不扩展正式预算。
+- 2026-11-12：Privileged `model_99.pt` 回放在障碍前停止超过 10 秒且不转向。
+  根因是 local-geometry 转换把 collision ray 的 `-1` no-hit 错当成无效深度，
+  导致开阔方向也被 adapter 判为未知危险、无法 track/resume。现将有限负距离
+  映射为 cutoff clearance 且 validity=1，仅 NaN/Inf 无效；定向测试覆盖 clear
+  tracking、朝开阔侧 search 和 resume。真实 reset/step 与 1-update CPU smoke
+  通过，loss 有限；旧 checkpoint 作废，需重新执行 100-update GPU 校准。
+- 2026-11-12：ray-miss 修正后的 Privileged 100-update GPU 校准完成。最后 20
+  updates 平均回报约 `-48.95`、safe tracking reward 约 `0.108`，随机采样仍主要
+  跌倒，训练曲线未显示明确改善。下一步只做 deterministic both-open 回放；
+  未确认制动、转向、恢复前不扩展训练预算。
+- 2026-11-12：修正后 `model_99.pt` 回放为前进、遇障停止，但不转向、不恢复，
+  仍未达到 `avoidance_resume`。该 checkpoint 记为失败校准，不直接追加迭代。
+  后续需区分端到端 privileged 几何策略与直接输入规则 safe twist 的 oracle
+  controller upper bound，避免混淆实验结论。
+- 2026-11-12：用户将 P7-3 privileged 目标简化为“遇障停车”，不再要求转向、
+  绕行或自动恢复。新的无状态 tracking target 在中间 3 条前向射线任一无效，
+  或最小净空不大于 1.2 m 时，把前进、侧移和偏航命令全部置零；该结果不受
+  nominal command 大小影响，侧面障碍不会触发转向。P7-2 规则 adapter 保持不变；
+  目标变更前的 privileged checkpoint 不恢复，下一步从 conservative warm-start
+  重新执行 100-update 校准并验证无碰撞稳定停车。纯逻辑、真实 reset/step 和
+  2-env CPU 1-update smoke 已通过；smoke 的 value/surrogate loss 分别为
+  `0.0453`/`-0.0542`，action std 保持 `0.15`。
+- 2026-11-12：P7-2 完成。六类 catalog 场景增加预期 outcome 与有限评估窗口；
+  根据旧 locomotion checkpoint 的多 seed 偏航响应，将规则 adapter 搜索预算从
+  12 秒重新标定为 18 秒，障碍场景最长评估 22 秒。`model_29999.pt` 在六场景 ×
+  seed 0/1/2 的真实环境矩阵中 `18/18` 通过：free/false-alarm 持续跟踪，三类
+  开口场景完成避障恢复，dead-end 安全 blocked；全部无 `pelvis` 障碍接触和
+  跌倒，最小前向传感净空 0.792 m。首次 1-update 产物也成功恢复并完成下一次
+  PPO update，loss 有限。P7-3 下一步训练 blind/privileged 学习基线；长期奖励
+  漏洞和视觉策略效果不属于本次规则基线结论。
+- 2026-11-11：接入首版 safe-velocity 任务奖励。保留通用 G1 locomotion 项，
+  仅在显式 safe-velocity 任务中用 depth adapter 的安全 twist 替换无条件 nominal
+  velocity tracking，并增加 `pelvis` 对所有非地面障碍接触的独立负奖励；普通
+  G1 velocity 默认奖励不变。纯逻辑、碰撞聚合、配置和真实 reset/step 等定向
+  回归共 `48 passed`。2 个环境、48 个采样步的 1-update PPO smoke 也已用本地
+  TensorBoard logger 跑通，loss 有限；默认 W&B logger 因未配置 API key 在
+  rollout 前退出。权重、奖励量级、完整六场景、多 seed、正式/恢复训练和学习
+  策略漏洞仍待验收，P7-2 不关闭。
+- 2026-11-11：将安全速度运行时代码从阶段编号命名重构为语义化的
+  `SafeVelocity*` API；冻结的 `safe_velocity_scenarios.py` 替代
+  `p7_scenarios.json` 和运行时 JSON 解析。现有 task ID 字符串、scenario id、
+  manifest spawn id 与行为保持兼容，P7 仅作为需求阶段编号保留。
+- 2026-11-11：新增 P7 privileged 轨迹 evaluator；碰撞 baseline 定义为 G1
+  `pelvis` base link 与任意非 `ground` 场景 geom 接触，足端和其他肢体接触暂不
+  纳入该 outcome。evaluator 汇总唯一 outcome、路径长度、深度传感净空、最大
+  接触力和接触冲量。九类 outcome 的脚本轨迹测试通过；同一 checkpoint/seed
+  的 left/right 650 步重跑均为 `avoidance_resume`，无 base-link 障碍接触、跌倒、
+  越界或停滞，最小前向深度传感净空分别为 0.962 m 和 0.933 m。仍需其他场景、
+  多 seed、geometry 净空和 P7 奖励，P7-2 不关闭。
+- 2026-11-11：新增 P7 adapter 结构化诊断脚本，记录 mode、三扇区净空/
+  valid ratio、输入/输出 command、搜索时间和机体轨迹。实测定位旧参数的恢复
+  停滞来自 `0.6 m` STOP 门槛在低速策略停住后不可达；新增独立的 `1.0 m`
+  搜索触发距离。旧 checkpoint 的实际原地旋转响应约需 8--10 秒进入安全扇区，
+  因此将 catalog 搜索预算从 6 秒标定为 12 秒。seed 0 的 left/right 650 步均
+  完成 `brake-stop-search-resume-track` 且未 blocked/终止；这不是碰撞、outcome
+  或多 seed 正式验收，P7-2 继续进行。
 - 2026-11-10：使用现有 G1 velocity `model_29999.pt` 人工运行 adapter 任务的
   多个 apartment 出生点，checkpoint 和 99 维 actor 接口正常，未观察到碰撞；
   但 `p7_left_open`/`p7_right_open` 基本不恢复平移，左右避障尚未通过。下一步
@@ -1076,7 +1175,7 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
   单一公开项目覆盖完整 P7，详细依据见主调研报告第 6.4 节。
 - 2026-11-09：按真实机器人没有位置传感器或定位模块的约束，将 P7 从
   PointGoal/目标条件导航重构为 ``3DGS 安全感知速度跟踪``。新增
-  ``mjlab-3dgs-p7-safe-velocity.md``，明确 actor 只读取 velocity command、
+  ``mjlab-3dgs-safe-velocity.md``，明确 actor 只读取 velocity command、
   本体状态和时序 depth+validity；复用 ``UniformVelocityCommand`` 和现有
   joint action，不读取世界位置、目标位置、地图或碰撞真值。任务状态改为
   正常跟踪、制动、停车、原地旋转搜索、安全选向、恢复跟踪和无出口站立；

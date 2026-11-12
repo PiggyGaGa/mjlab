@@ -1,7 +1,7 @@
 # mjlab 3DGS 训练模块需求
 
 项目总体进度、已完成证据和后续执行顺序见 `mjlab-3dgs-todo.md`。P7 的
-详细任务与验收契约见 `mjlab-3dgs-p7-safe-velocity.md`。
+详细任务与验收契约见 `mjlab-3dgs-safe-velocity.md`。
 
 ## 1. 文档目的
 
@@ -156,6 +156,10 @@ Play 模块只能依赖公开的环境构建 API、场景 manifest 和 checkpoin
 - 未配置 3DGS 时，现有相机、分割和 raycast 行为保持不变。
 - RGB 必须正确合成 3DGS 和 MuJoCo 几何体的遮挡关系。
 - 深度必须遵循并记录当前 MuJoCo Warp 的 splat 深度语义。
+- `create_render_context` 的 `splat_depth_transmittance_threshold` 控制记录
+  Gaussian depth 的剩余透射率阈值；当前锁定 fork 默认值为 `0.1`，有效范围为
+  `(0, 1)`。若修改该值，必须记录配置并重新验证孔洞率、RGB/depth 对齐和已有
+  checkpoint 的输入分布。
 - 首版可不为 splat 分配 segmentation id，但不得误标为 MuJoCo geom。
 - 静态场景只在初始化时构建 splat BVH，不做无意义的逐 step refit。
 
@@ -441,7 +445,7 @@ Gaussian 数据。顶层静态 body 不添加 joint，因此由 MuJoCo 作为固
 ### TR-FR-9：最小安全感知速度跟踪任务
 
 本节给出训练模块的总体约束。P7 的 scenario、MDP、outcome、safety shield、
-指标、测试和阶段门槛以 `mjlab-3dgs-p7-safe-velocity.md` 为准；两者冲突时应先
+指标、测试和阶段门槛以 `mjlab-3dgs-safe-velocity.md` 为准；两者冲突时应先
 更新并统一需求，不能由实现自行选择。
 
 首个端到端任务为 G1 在真实重建场景中的安全速度跟踪与局部障碍规避。

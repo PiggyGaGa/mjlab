@@ -358,6 +358,7 @@ class SensorContext:
         splat_rgba=splat_rgba,
         splat_adr=splat_adr,
         splat_group_id=splat_group_id,
+        splat_depth_transmittance_threshold=0.1,
       )
 
     # Cache address arrays from the render context. An adr value of -1 means that data

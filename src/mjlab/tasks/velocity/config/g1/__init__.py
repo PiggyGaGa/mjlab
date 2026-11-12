@@ -19,12 +19,18 @@ from .rl_cfg import (
   unitree_g1_ppo_runner_cfg,
 )
 from .safe_velocity import (
-  P7_ADAPTER_TASK_ID,
-  P7_TASK_ID,
+  SAFE_VELOCITY_ADAPTER_TASK_ID,
+  SAFE_VELOCITY_BLIND_TASK_ID,
+  SAFE_VELOCITY_PRIVILEGED_TASK_ID,
+  SAFE_VELOCITY_TASK_ID,
   unitree_g1_safe_velocity_3dgs_env_cfg,
   unitree_g1_safe_velocity_3dgs_ppo_runner_cfg,
   unitree_g1_safe_velocity_adapter_3dgs_env_cfg,
   unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg,
+  unitree_g1_safe_velocity_blind_3dgs_env_cfg,
+  unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg,
+  unitree_g1_safe_velocity_privileged_3dgs_env_cfg,
+  unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg,
 )
 
 register_mjlab_task(
@@ -36,7 +42,7 @@ register_mjlab_task(
 )
 
 register_mjlab_task(
-  task_id=P7_ADAPTER_TASK_ID,
+  task_id=SAFE_VELOCITY_ADAPTER_TASK_ID,
   env_cfg=unitree_g1_safe_velocity_adapter_3dgs_env_cfg(),
   play_env_cfg=unitree_g1_safe_velocity_adapter_3dgs_env_cfg(play=True),
   rl_cfg=unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg(),
@@ -44,10 +50,26 @@ register_mjlab_task(
 )
 
 register_mjlab_task(
-  task_id=P7_TASK_ID,
+  task_id=SAFE_VELOCITY_TASK_ID,
   env_cfg=unitree_g1_safe_velocity_3dgs_env_cfg(),
   play_env_cfg=unitree_g1_safe_velocity_3dgs_env_cfg(play=True),
   rl_cfg=unitree_g1_safe_velocity_3dgs_ppo_runner_cfg(),
+  runner_cls=VelocityOnPolicyRunner,
+)
+
+register_mjlab_task(
+  task_id=SAFE_VELOCITY_BLIND_TASK_ID,
+  env_cfg=unitree_g1_safe_velocity_blind_3dgs_env_cfg(),
+  play_env_cfg=unitree_g1_safe_velocity_blind_3dgs_env_cfg(play=True),
+  rl_cfg=unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg(),
+  runner_cls=VelocityOnPolicyRunner,
+)
+
+register_mjlab_task(
+  task_id=SAFE_VELOCITY_PRIVILEGED_TASK_ID,
+  env_cfg=unitree_g1_safe_velocity_privileged_3dgs_env_cfg(),
+  play_env_cfg=unitree_g1_safe_velocity_privileged_3dgs_env_cfg(play=True),
+  rl_cfg=unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg(),
   runner_cls=VelocityOnPolicyRunner,
 )
 

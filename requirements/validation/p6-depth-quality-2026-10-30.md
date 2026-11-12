@@ -3,6 +3,12 @@
 本轮发现并修复 G1 observation 对缺失深度的编码错误，同时确认一个固定
 reset 姿态下的相机方向和自遮挡范围。P6 尚未宣称动态深度质量合格。
 
+> **2026-11-11 更新：**本文是旧后端固定阈值 `0.005` 下的历史验收记录。
+> 当前锁定的 MuJoCo Warp fork 在 `create_render_context` 中新增
+> `splat_depth_transmittance_threshold`，默认值为 `0.1`。下述数值尚未在新默认值
+> 下复测，不能直接代表当前环境；现行接口和迁移说明见用户文档及
+> `mjlab-3dgs-todo.md`。
+
 ## 1. 实际深度定义
 
 依据安装的 `mujoco_warp/_src/render.py` 中 `ray_splat`、`shade_splats`

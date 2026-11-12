@@ -1,17 +1,24 @@
-"""P7 safe perceptive velocity tracking configuration."""
+"""Safe perceptive velocity tracking configuration for Unitree G1."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Literal, cast
+import math
+from xml.etree import ElementTree
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.observation_manager import ObservationTermCfg
+from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.rl import RslRlOnPolicyRunnerCfg
 from mjlab.scene import apply_scene_manifest, load_scene_manifest
+from mjlab.sensor import (
+  ContactMatch,
+  ContactSensorCfg,
+  GridPatternCfg,
+  ObjRef,
+  RayCastSensorCfg,
+)
+from mjlab.tasks.g1_3dgs import G1_3DGS_DEPTH_SENSOR
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
 from .env_cfgs import (
@@ -21,247 +28,80 @@ from .rl_cfg import (
   unitree_g1_3dgs_depth_validity_history_robust_asymmetric_ppo_runner_cfg,
   unitree_g1_ppo_runner_cfg,
 )
-from .safe_velocity_baseline import P7DepthAdapterCfg, adapted_velocity_command
+from .safe_velocity_baseline import (
+  SafeVelocityDepthAdapterCfg,
+  SafeVelocityLocalGeometryTrackingReward,
+  SafeVelocityTrackingReward,
+  adapted_velocity_command,
+  safe_velocity_base_obstacle_collision_cost,
+  safe_velocity_local_geometry,
+)
+from .safe_velocity_scenarios import (
+  SAFE_VELOCITY_SCENARIO_CATALOG,
+  SafeVelocityScenarioCatalog,
+)
 
-P7_TASK_ID = "Mjlab-Velocity-Safe-Unitree-G1-3DGS"
-P7_ADAPTER_TASK_ID = "Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS"
-P7_SCENARIO_CATALOG_PATH = Path(__file__).with_name("p7_scenarios.json")
-
-
-@dataclass(frozen=True)
-class P7CommandProtocol:
-  """Frozen initial command ranges for P7."""
-
-  resampling_time_s: tuple[float, float]
-  lin_vel_x: tuple[float, float]
-  lin_vel_y: tuple[float, float]
-  ang_vel_z: tuple[float, float]
-
-
-@dataclass(frozen=True)
-class P7SafetyThresholds:
-  """Initial values to calibrate during P7-0 and P7-3."""
-
-  collision_risk_distance_m: float
-  stop_clearance_m: float
-  search_time_budget_s: float
-  search_angle_budget_deg: float
-
-
-@dataclass(frozen=True)
-class P7Scenario:
-  """One deterministic local-obstacle scenario."""
-
-  id: str
-  split: Literal["train", "validation", "test"]
-  spawn_point: str
-  nominal_command: tuple[float, float, float]
-  blocking_geoms: tuple[str, ...]
-  safe_exit_sectors_deg: tuple[tuple[float, float], ...]
-  allowed_region_xy: tuple[float, float, float, float]
-  expected_behavior: str
-  min_clearance_m: float
-  search_time_budget_s: float
-  search_angle_budget_deg: float
-  review_status: Literal["pending", "approved"]
+SAFE_VELOCITY_TASK_ID = "Mjlab-Velocity-Safe-Unitree-G1-3DGS"
+SAFE_VELOCITY_ADAPTER_TASK_ID = "Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS"
+SAFE_VELOCITY_BLIND_TASK_ID = "Mjlab-Velocity-Safe-Blind-Unitree-G1-3DGS"
+SAFE_VELOCITY_PRIVILEGED_TASK_ID = "Mjlab-Velocity-Safe-Privileged-Unitree-G1-3DGS"
+SAFE_VELOCITY_COLLISION_SENSOR_PREFIX = "safe_velocity_base_obstacle_contact_"
+SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX = "safe_velocity_local_geometry_ray_"
+SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS = frozenset({"ground"})
+_LOCAL_GEOMETRY_RAY_ANGLES_DEG = (
+  80.0,
+  60.0,
+  40.0,
+  20.0,
+  0.0,
+  -20.0,
+  -40.0,
+  -60.0,
+  -80.0,
+)
 
 
-@dataclass(frozen=True)
-class P7ScenarioCatalog:
-  """Versioned P7 scenario protocol resolved to the apartment manifest."""
-
-  source_path: Path
-  scene_manifest: Path
-  command: P7CommandProtocol
-  thresholds: P7SafetyThresholds
-  scenarios: tuple[P7Scenario, ...]
-
-  def scenario(self, scenario_id: str) -> P7Scenario:
-    """Return a scenario by ID with a useful error for CLI/config callers."""
-    match = next((item for item in self.scenarios if item.id == scenario_id), None)
-    if match is not None:
-      return match
-    available = ", ".join(item.id for item in self.scenarios)
-    raise ValueError(f"Unknown P7 scenario '{scenario_id}'; available: {available}")
+def _safe_velocity_adapter_cfg(
+  catalog: SafeVelocityScenarioCatalog,
+) -> SafeVelocityDepthAdapterCfg:
+  """Build one adapter threshold set shared by reward and baseline tasks."""
+  return SafeVelocityDepthAdapterCfg(
+    collision_risk_distance_m=catalog.thresholds.collision_risk_distance_m,
+    stop_clearance_m=catalog.thresholds.stop_clearance_m,
+    search_trigger_distance_m=catalog.thresholds.search_trigger_distance_m,
+    search_time_budget_s=catalog.thresholds.search_time_budget_s,
+  )
 
 
-def _float_tuple(value: Any, length: int, label: str) -> tuple[float, ...]:
-  if not isinstance(value, list) or len(value) != length:
-    raise ValueError(f"{label} must contain exactly {length} numbers")
+def _safe_velocity_obstacle_geom_names(
+  catalog: SafeVelocityScenarioCatalog,
+) -> tuple[str, ...]:
+  """Return collision geoms that must not contact the robot base link."""
+  manifest = load_scene_manifest(catalog.scene_manifest)
   try:
-    result = tuple(float(item) for item in value)
-  except (TypeError, ValueError) as exc:
-    raise ValueError(f"{label} must contain only numbers") from exc
-  return result
-
-
-def _range(value: Any, label: str) -> tuple[float, float]:
-  result = cast(tuple[float, float], _float_tuple(value, 2, label))
-  if result[0] > result[1]:
-    raise ValueError(f"{label} must be ordered")
-  return result
-
-
-def _positive_float(value: Any, label: str) -> float:
-  try:
-    result = float(value)
-  except (TypeError, ValueError) as exc:
-    raise ValueError(f"{label} must be a number") from exc
-  if result <= 0:
-    raise ValueError(f"{label} must be positive")
-  return result
-
-
-def load_p7_scenario_catalog(
-  path: str | Path = P7_SCENARIO_CATALOG_PATH,
-) -> P7ScenarioCatalog:
-  """Load and validate the task-local P7 scenario catalog."""
-  source_path = Path(path).resolve()
-  raw = json.loads(source_path.read_text())
-  if not isinstance(raw, dict) or raw.get("schema_version") != 1:
-    raise ValueError("P7 scenario catalog must use schema_version 1")
-
-  manifest_value = raw.get("scene_manifest")
-  if not isinstance(manifest_value, str) or not manifest_value:
-    raise ValueError("scene_manifest must be a non-empty relative path")
-  scene_manifest = (source_path.parent / manifest_value).resolve()
-  manifest = load_scene_manifest(scene_manifest)
-  spawn_names = {spawn.name for spawn in manifest.spawn_points}
-
-  command_raw = raw.get("command")
-  if not isinstance(command_raw, dict):
-    raise ValueError("command must be an object")
-  command = P7CommandProtocol(
-    resampling_time_s=_range(
-      command_raw.get("resampling_time_s"), "command.resampling_time_s"
-    ),
-    lin_vel_x=_range(command_raw.get("lin_vel_x"), "command.lin_vel_x"),
-    lin_vel_y=_range(command_raw.get("lin_vel_y"), "command.lin_vel_y"),
-    ang_vel_z=_range(command_raw.get("ang_vel_z"), "command.ang_vel_z"),
+    root = ElementTree.parse(manifest.collision.path).getroot()
+  except ElementTree.ParseError as exc:
+    raise ValueError(
+      f"Invalid safe-velocity collision MJCF XML '{manifest.collision.path}': {exc}"
+    ) from exc
+  geom_names = tuple(
+    geom_name
+    for geom in root.findall(".//worldbody//geom")
+    if (geom_name := geom.attrib.get("name"))
+    and geom_name not in SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS
   )
-
-  thresholds_raw = raw.get("thresholds")
-  if not isinstance(thresholds_raw, dict):
-    raise ValueError("thresholds must be an object")
-  thresholds = P7SafetyThresholds(
-    collision_risk_distance_m=_positive_float(
-      thresholds_raw.get("collision_risk_distance_m"),
-      "thresholds.collision_risk_distance_m",
-    ),
-    stop_clearance_m=_positive_float(
-      thresholds_raw.get("stop_clearance_m"), "thresholds.stop_clearance_m"
-    ),
-    search_time_budget_s=_positive_float(
-      thresholds_raw.get("search_time_budget_s"),
-      "thresholds.search_time_budget_s",
-    ),
-    search_angle_budget_deg=_positive_float(
-      thresholds_raw.get("search_angle_budget_deg"),
-      "thresholds.search_angle_budget_deg",
-    ),
-  )
-
-  scenarios_raw = raw.get("scenarios")
-  if not isinstance(scenarios_raw, list) or not scenarios_raw:
-    raise ValueError("scenarios must be a non-empty list")
-  scenarios: list[P7Scenario] = []
-  ids: set[str] = set()
-  for index, item in enumerate(scenarios_raw):
-    label = f"scenarios[{index}]"
-    if not isinstance(item, dict):
-      raise ValueError(f"{label} must be an object")
-    scenario_id = item.get("id")
-    if not isinstance(scenario_id, str) or not scenario_id:
-      raise ValueError(f"{label}.id must be a non-empty string")
-    if scenario_id in ids:
-      raise ValueError(f"Duplicate P7 scenario id: {scenario_id}")
-    ids.add(scenario_id)
-
-    split = item.get("split")
-    if split not in ("train", "validation", "test"):
-      raise ValueError(f"{label}.split must be train, validation, or test")
-    spawn_point = item.get("spawn_point")
-    if spawn_point not in spawn_names:
-      raise ValueError(f"{label}.spawn_point is not in the scene manifest")
-    review_status = item.get("review_status")
-    if review_status not in ("pending", "approved"):
-      raise ValueError(f"{label}.review_status must be pending or approved")
-
-    sectors_raw = item.get("safe_exit_sectors_deg")
-    if not isinstance(sectors_raw, list):
-      raise ValueError(f"{label}.safe_exit_sectors_deg must be a list")
-    sectors = tuple(
-      _range(sector, f"{label}.safe_exit_sectors_deg") for sector in sectors_raw
-    )
-    nominal_command = cast(
-      tuple[float, float, float],
-      _float_tuple(item.get("nominal_command"), 3, f"{label}.nominal_command"),
-    )
-    command_ranges = (command.lin_vel_x, command.lin_vel_y, command.ang_vel_z)
-    if any(
-      not low <= value <= high
-      for value, (low, high) in zip(nominal_command, command_ranges, strict=True)
-    ):
-      raise ValueError(f"{label}.nominal_command is outside command ranges")
-
-    blocking_geoms = item.get("blocking_geoms")
-    if not isinstance(blocking_geoms, list) or not all(
-      isinstance(name, str) and name for name in blocking_geoms
-    ):
-      raise ValueError(f"{label}.blocking_geoms must contain geom names")
-    expected_behavior = item.get("expected_behavior")
-    if not isinstance(expected_behavior, str) or not expected_behavior:
-      raise ValueError(f"{label}.expected_behavior must be a non-empty string")
-    allowed_region = cast(
-      tuple[float, float, float, float],
-      _float_tuple(item.get("allowed_region_xy"), 4, f"{label}.allowed_region_xy"),
-    )
-    if allowed_region[0] >= allowed_region[1] or allowed_region[2] >= allowed_region[3]:
-      raise ValueError(f"{label}.allowed_region_xy bounds must be ordered")
-    scenarios.append(
-      P7Scenario(
-        id=scenario_id,
-        split=split,
-        spawn_point=cast(str, spawn_point),
-        nominal_command=nominal_command,
-        blocking_geoms=tuple(blocking_geoms),
-        safe_exit_sectors_deg=sectors,
-        allowed_region_xy=allowed_region,
-        expected_behavior=expected_behavior,
-        min_clearance_m=_positive_float(
-          item.get("min_clearance_m"), f"{label}.min_clearance_m"
-        ),
-        search_time_budget_s=_positive_float(
-          item.get("search_time_budget_s"), f"{label}.search_time_budget_s"
-        ),
-        search_angle_budget_deg=_positive_float(
-          item.get("search_angle_budget_deg"),
-          f"{label}.search_angle_budget_deg",
-        ),
-        review_status=cast(Literal["pending", "approved"], review_status),
-      )
-    )
-
-  required = {"free", "left_open", "right_open", "both_open", "dead_end", "false_alarm"}
-  missing = required - ids
-  if missing:
-    raise ValueError(f"P7 scenario catalog is missing: {', '.join(sorted(missing))}")
-  return P7ScenarioCatalog(
-    source_path=source_path,
-    scene_manifest=scene_manifest,
-    command=command,
-    thresholds=thresholds,
-    scenarios=tuple(scenarios),
-  )
+  if not geom_names:
+    raise ValueError("Safe-velocity collision MJCF has no obstacle geoms")
+  return geom_names
 
 
 def unitree_g1_safe_velocity_3dgs_env_cfg(
   play: bool = False,
   scenario_id: str = "both_open",
 ) -> ManagerBasedRlEnvCfg:
-  """Create the isolated P7 task skeleton for one deterministic scenario."""
+  """Create the isolated safe-velocity task for one deterministic scenario."""
   cfg = unitree_g1_flat_3dgs_depth_validity_history_robust_env_cfg(play=play)
-  catalog = load_p7_scenario_catalog()
+  catalog = SAFE_VELOCITY_SCENARIO_CATALOG
   scenario = catalog.scenario(scenario_id)
   apply_scene_manifest(
     cfg.scene,
@@ -273,6 +113,45 @@ def unitree_g1_safe_velocity_3dgs_env_cfg(
   cfg.scene.env_spacing = 12.0
   cfg.sim.nconmax = max(cfg.sim.nconmax or 0, 256)
   cfg.sim.contact_sensor_maxmatch = max(cfg.sim.contact_sensor_maxmatch, 256)
+  obstacle_geom_names = _safe_velocity_obstacle_geom_names(catalog)
+  obstacle_contact_sensors = tuple(
+    ContactSensorCfg(
+      name=f"{SAFE_VELOCITY_COLLISION_SENSOR_PREFIX}{index}",
+      primary=ContactMatch(mode="body", pattern="pelvis", entity="robot"),
+      secondary=ContactMatch(mode="geom", pattern=geom_name),
+      fields=("found", "force", "dist"),
+      reduce="maxforce",
+      history_length=cfg.decimation,
+    )
+    for index, geom_name in enumerate(obstacle_geom_names)
+  )
+  cfg.scene.sensors = (cfg.scene.sensors or ()) + obstacle_contact_sensors
+
+  # Replace unconditional nominal tracking with the same reward shape evaluated
+  # against a depth-conditioned safe twist. This preserves free-space locomotion
+  # incentives while allowing braking, search, and blocked standing near obstacles.
+  cfg.rewards["track_linear_velocity"].weight = 0.0
+  cfg.rewards["track_angular_velocity"].weight = 0.0
+  adapter_cfg = _safe_velocity_adapter_cfg(catalog)
+  cfg.rewards["safe_velocity_tracking"] = RewardTermCfg(
+    func=SafeVelocityTrackingReward,
+    weight=2.0,
+    params={
+      "command_name": "twist",
+      "sensor_name": G1_3DGS_DEPTH_SENSOR,
+      "adapter_cfg": adapter_cfg,
+      "linear_std": math.sqrt(0.25),
+      "angular_std": math.sqrt(0.5),
+    },
+  )
+  cfg.rewards["base_obstacle_collision"] = RewardTermCfg(
+    func=safe_velocity_base_obstacle_collision_cost,
+    weight=-5.0,
+    params={
+      "sensor_names": tuple(sensor.name for sensor in obstacle_contact_sensors),
+      "force_threshold": 10.0,
+    },
+  )
 
   twist = cfg.commands["twist"]
   assert isinstance(twist, UniformVelocityCommandCfg)
@@ -286,8 +165,11 @@ def unitree_g1_safe_velocity_3dgs_env_cfg(
   twist.ranges.lin_vel_x = catalog.command.lin_vel_x
   twist.ranges.lin_vel_y = catalog.command.lin_vel_y
   twist.ranges.ang_vel_z = catalog.command.ang_vel_z
+  # The generic G1 curriculum starts at reverse-capable (-1, 1) commands and
+  # would overwrite the frozen P7 forward-only protocol on the first reset.
+  cfg.curriculum.pop("command_vel", None)
 
-  # P7-0 uses deterministic scenario poses. Randomized spawn curricula are added
+  # Use deterministic scenario poses. Randomized spawn curricula are added
   # only after the catalog has passed visual/collision review.
   reset_base = cfg.events["reset_base"]
   reset_base.params["pose_range"] = {
@@ -304,7 +186,7 @@ def unitree_g1_safe_velocity_3dgs_env_cfg(
 
 
 def unitree_g1_safe_velocity_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
-  """Reuse the P6 actor-camera/asymmetric-critic runner for P7."""
+  """Reuse the robust actor-camera/asymmetric-critic runner."""
   cfg = unitree_g1_3dgs_depth_validity_history_robust_asymmetric_ppo_runner_cfg()
   cfg.experiment_name = "g1_3dgs_safe_velocity"
   return cfg
@@ -319,17 +201,13 @@ def unitree_g1_safe_velocity_adapter_3dgs_env_cfg(
     play=play,
     scenario_id=scenario_id,
   )
-  catalog = load_p7_scenario_catalog()
+  catalog = SAFE_VELOCITY_SCENARIO_CATALOG
   cfg.observations["actor"].terms["command"] = ObservationTermCfg(
     func=adapted_velocity_command,
     params={
       "command_name": "twist",
-      "sensor_name": "g1_3dgs_depth",
-      "adapter_cfg": P7DepthAdapterCfg(
-        collision_risk_distance_m=(catalog.thresholds.collision_risk_distance_m),
-        stop_clearance_m=catalog.thresholds.stop_clearance_m,
-        search_time_budget_s=catalog.thresholds.search_time_budget_s,
-      ),
+      "sensor_name": G1_3DGS_DEPTH_SENSOR,
+      "adapter_cfg": _safe_velocity_adapter_cfg(catalog),
     },
   )
   # The camera remains in the scene for the adapter, but the blind policy and its
@@ -345,15 +223,128 @@ def unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunne
   return cfg
 
 
+def unitree_g1_safe_velocity_blind_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+) -> ManagerBasedRlEnvCfg:
+  """Create the renderer-free blind baseline in the frozen collision scene."""
+  cfg = unitree_g1_safe_velocity_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+  )
+  cfg.scene.sensors = tuple(
+    sensor for sensor in cfg.scene.sensors if sensor.name != G1_3DGS_DEPTH_SENSOR
+  )
+  cfg.scene.gaussian_splats = None
+  cfg.observations.pop("camera")
+  cfg.rewards.pop("safe_velocity_tracking")
+  cfg.rewards["track_linear_velocity"].weight = 2.0
+  cfg.rewards["track_angular_velocity"].weight = 2.0
+  return cfg
+
+
+def unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Fine-tune the standard G1 MLP conservatively for the blind baseline."""
+  cfg = unitree_g1_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_blind"
+  assert cfg.actor.distribution_cfg is not None
+  cfg.actor.distribution_cfg = {
+    **cfg.actor.distribution_cfg,
+    "init_std": 0.15,
+    "std_range": (0.15, 0.15),
+    "learn_std": False,
+  }
+  cfg.algorithm.learning_rate = 1.0e-4
+  cfg.algorithm.entropy_coef = 0.0
+  cfg.algorithm.num_learning_epochs = 2
+  return cfg
+
+
+def _safe_velocity_local_geometry_sensors(
+  play: bool,
+) -> tuple[RayCastSensorCfg, ...]:
+  """Build a pelvis-frame collision-truth ray fan ordered left to right."""
+  sensors = []
+  for index, angle_deg in enumerate(_LOCAL_GEOMETRY_RAY_ANGLES_DEG):
+    angle_rad = math.radians(angle_deg)
+    sensors.append(
+      RayCastSensorCfg(
+        name=f"{SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX}{index:02d}",
+        frame=ObjRef(type="body", name="pelvis", entity="robot"),
+        pattern=GridPatternCfg(
+          size=(0.0, 0.0),
+          resolution=1.0,
+          direction=(math.cos(angle_rad), math.sin(angle_rad), 0.0),
+        ),
+        ray_alignment="base",
+        max_distance=5.0,
+        exclude_parent_body=True,
+        include_geom_groups=(1, 3),
+        debug_vis=play,
+      )
+    )
+  return tuple(sensors)
+
+
+def unitree_g1_safe_velocity_privileged_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+) -> ManagerBasedRlEnvCfg:
+  """Create the non-deployable local-geometry stop-policy baseline."""
+  cfg = unitree_g1_safe_velocity_blind_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+  )
+  ray_sensors = _safe_velocity_local_geometry_sensors(play=play)
+  sensor_names = tuple(sensor.name for sensor in ray_sensors)
+  cfg.scene.sensors += ray_sensors
+  observation = ObservationTermCfg(
+    func=safe_velocity_local_geometry,
+    params={
+      "sensor_names": sensor_names,
+      "cutoff_distance_m": 5.0,
+    },
+  )
+  cfg.observations["actor"].terms["local_geometry"] = observation
+  cfg.observations["critic"].terms["local_geometry"] = observation
+
+  cfg.rewards["track_linear_velocity"].weight = 0.0
+  cfg.rewards["track_angular_velocity"].weight = 0.0
+  cfg.rewards["safe_velocity_tracking"] = RewardTermCfg(
+    func=SafeVelocityLocalGeometryTrackingReward,
+    weight=2.0,
+    params={
+      "command_name": "twist",
+      "sensor_names": sensor_names,
+      "adapter_cfg": _safe_velocity_adapter_cfg(SAFE_VELOCITY_SCENARIO_CATALOG),
+      "linear_std": math.sqrt(0.25),
+      "angular_std": math.sqrt(0.5),
+    },
+  )
+  return cfg
+
+
+def unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Reuse conservative locomotion fine-tuning for privileged local geometry."""
+  cfg = unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_privileged"
+  return cfg
+
+
 __all__ = [
-  "P7_SCENARIO_CATALOG_PATH",
-  "P7_ADAPTER_TASK_ID",
-  "P7_TASK_ID",
-  "P7Scenario",
-  "P7ScenarioCatalog",
-  "load_p7_scenario_catalog",
+  "SAFE_VELOCITY_ADAPTER_TASK_ID",
+  "SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS",
+  "SAFE_VELOCITY_BLIND_TASK_ID",
+  "SAFE_VELOCITY_COLLISION_SENSOR_PREFIX",
+  "SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX",
+  "SAFE_VELOCITY_PRIVILEGED_TASK_ID",
+  "SAFE_VELOCITY_TASK_ID",
+  "unitree_g1_safe_velocity_blind_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg",
   "unitree_g1_safe_velocity_3dgs_env_cfg",
   "unitree_g1_safe_velocity_3dgs_ppo_runner_cfg",
   "unitree_g1_safe_velocity_adapter_3dgs_env_cfg",
   "unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg",
+  "unitree_g1_safe_velocity_privileged_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg",
 ]

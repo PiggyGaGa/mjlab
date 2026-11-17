@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from xml.etree import ElementTree
 
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
-from mjlab.managers.observation_manager import ObservationTermCfg
+from mjlab.managers import TerminationTermCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.rl import RslRlOnPolicyRunnerCfg
 from mjlab.scene import apply_scene_manifest, load_scene_manifest
@@ -19,6 +22,7 @@ from mjlab.sensor import (
   RayCastSensorCfg,
 )
 from mjlab.tasks.g1_3dgs import G1_3DGS_DEPTH_SENSOR
+from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
 from .env_cfgs import (
@@ -31,6 +35,11 @@ from .rl_cfg import (
 from .safe_velocity_baseline import (
   SafeVelocityDepthAdapterCfg,
   SafeVelocityLocalGeometryTrackingReward,
+  SafeVelocityPrivilegedSafetyCommand,
+  SafeVelocityPrivilegedSafetyLabels,
+  SafeVelocityPrivilegedStopCommand,
+  SafeVelocitySafetyTeacherCfg,
+  SafeVelocitySafetyTeacherTrackingReward,
   SafeVelocityTrackingReward,
   adapted_velocity_command,
   safe_velocity_base_obstacle_collision_cost,
@@ -40,14 +49,25 @@ from .safe_velocity_scenarios import (
   SAFE_VELOCITY_SCENARIO_CATALOG,
   SafeVelocityScenarioCatalog,
 )
+from .safe_velocity_sensors import CollisionTruthRaySensorCfg
 
 SAFE_VELOCITY_TASK_ID = "Mjlab-Velocity-Safe-Unitree-G1-3DGS"
 SAFE_VELOCITY_ADAPTER_TASK_ID = "Mjlab-Velocity-Safe-Adapter-Unitree-G1-3DGS"
+SAFE_VELOCITY_DEPTH_STOP_TASK_ID = "Mjlab-Velocity-Safe-Depth-Stop-Unitree-G1-3DGS"
 SAFE_VELOCITY_BLIND_TASK_ID = "Mjlab-Velocity-Safe-Blind-Unitree-G1-3DGS"
 SAFE_VELOCITY_PRIVILEGED_TASK_ID = "Mjlab-Velocity-Safe-Privileged-Unitree-G1-3DGS"
+SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID = (
+  "Mjlab-Velocity-Safe-Privileged-Stop-Gate-Unitree-G1-3DGS"
+)
+SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID = (
+  "Mjlab-Velocity-Safe-Privileged-Safety-Teacher-Unitree-G1-3DGS"
+)
+SAFE_VELOCITY_VISION_DATA_TASK_ID = "Mjlab-Velocity-Safe-Vision-Data-Unitree-G1-3DGS"
 SAFE_VELOCITY_COLLISION_SENSOR_PREFIX = "safe_velocity_base_obstacle_contact_"
+SAFE_VELOCITY_NONFOOT_GROUND_SENSOR = "safe_velocity_nonfoot_ground_contact"
 SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX = "safe_velocity_local_geometry_ray_"
 SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS = frozenset({"ground"})
+SAFE_VELOCITY_MIN_PELVIS_HEIGHT_M = 0.5
 _LOCAL_GEOMETRY_RAY_ANGLES_DEG = (
   80.0,
   60.0,
@@ -73,11 +93,50 @@ def _safe_velocity_adapter_cfg(
   )
 
 
+def _safe_velocity_depth_stop_cfg() -> SafeVelocityDepthAdapterCfg:
+  """Build the shape-independent depth threshold safety layer."""
+  return SafeVelocityDepthAdapterCfg(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    clearance_quantile=0.2,
+    vertical_roi=(0.2, 0.85),
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+    horizontal_window_fraction=0.25,
+    temporal_median_window=7,
+    maximum_forward_speed_m_s=0.5,
+  )
+
+
+def _set_safe_velocity_play_command(
+  cfg: ManagerBasedRlEnvCfg,
+  scenario_id: str,
+) -> None:
+  """Use the selected scenario command for deterministic safety playback."""
+  scenario = SAFE_VELOCITY_SCENARIO_CATALOG.scenario(scenario_id)
+  _set_safe_velocity_play_twist(cfg, scenario.nominal_command)
+
+
+def _set_safe_velocity_play_twist(
+  cfg: ManagerBasedRlEnvCfg,
+  command: tuple[float, float, float],
+) -> None:
+  """Freeze one deterministic body-frame twist for playback."""
+  twist = cfg.commands["twist"]
+  assert isinstance(twist, UniformVelocityCommandCfg)
+  vx, vy, wz = command
+  twist.ranges.lin_vel_x = (vx, vx)
+  twist.ranges.lin_vel_y = (vy, vy)
+  twist.ranges.ang_vel_z = (wz, wz)
+  twist.rel_forward_envs = 0.0
+
+
 def _safe_velocity_obstacle_geom_names(
-  catalog: SafeVelocityScenarioCatalog,
+  scene_manifest: str | Path,
 ) -> tuple[str, ...]:
   """Return collision geoms that must not contact the robot base link."""
-  manifest = load_scene_manifest(catalog.scene_manifest)
+  manifest = load_scene_manifest(scene_manifest)
   try:
     root = ElementTree.parse(manifest.collision.path).getroot()
   except ElementTree.ParseError as exc:
@@ -98,22 +157,30 @@ def _safe_velocity_obstacle_geom_names(
 def unitree_g1_safe_velocity_3dgs_env_cfg(
   play: bool = False,
   scenario_id: str = "both_open",
+  scene_manifest: str | Path | None = None,
+  scene_spawn_point: str | None = None,
 ) -> ManagerBasedRlEnvCfg:
   """Create the isolated safe-velocity task for one deterministic scenario."""
   cfg = unitree_g1_flat_3dgs_depth_validity_history_robust_env_cfg(play=play)
   catalog = SAFE_VELOCITY_SCENARIO_CATALOG
   scenario = catalog.scenario(scenario_id)
+  manifest_path = catalog.scene_manifest if scene_manifest is None else scene_manifest
+  spawn_point = scene_spawn_point
+  if spawn_point is None and scene_manifest is None:
+    spawn_point = scenario.spawn_point
   apply_scene_manifest(
     cfg.scene,
-    catalog.scene_manifest,
-    spawn_point=scenario.spawn_point,
+    manifest_path,
+    spawn_point=spawn_point,
   )
 
-  # Keep replicated apartments isolated when more than one world is requested.
-  cfg.scene.env_spacing = 12.0
+  # MuJoCo Warp already isolates vectorized environments as separate worlds that
+  # share this collision model and splat asset. Keep every robot in scene-local
+  # coordinates so collision, camera, and raycast geometry stay aligned per world.
+  cfg.scene.env_spacing = 0.0
   cfg.sim.nconmax = max(cfg.sim.nconmax or 0, 256)
   cfg.sim.contact_sensor_maxmatch = max(cfg.sim.contact_sensor_maxmatch, 256)
-  obstacle_geom_names = _safe_velocity_obstacle_geom_names(catalog)
+  obstacle_geom_names = _safe_velocity_obstacle_geom_names(manifest_path)
   obstacle_contact_sensors = tuple(
     ContactSensorCfg(
       name=f"{SAFE_VELOCITY_COLLISION_SENSOR_PREFIX}{index}",
@@ -125,7 +192,33 @@ def unitree_g1_safe_velocity_3dgs_env_cfg(
     )
     for index, geom_name in enumerate(obstacle_geom_names)
   )
-  cfg.scene.sensors = (cfg.scene.sensors or ()) + obstacle_contact_sensors
+  nonfoot_ground_sensor = ContactSensorCfg(
+    name=SAFE_VELOCITY_NONFOOT_GROUND_SENSOR,
+    primary=ContactMatch(
+      mode="body",
+      pattern=".*",
+      entity="robot",
+      exclude=("left_ankle_roll_link", "right_ankle_roll_link"),
+    ),
+    secondary=ContactMatch(mode="body", pattern="terrain"),
+    fields=("found", "force"),
+    reduce="maxforce",
+    history_length=cfg.decimation,
+  )
+  cfg.scene.sensors = (
+    (cfg.scene.sensors or ()) + obstacle_contact_sensors + (nonfoot_ground_sensor,)
+  )
+  cfg.terminations["pelvis_too_low"] = TerminationTermCfg(
+    func=envs_mdp.root_height_below_minimum,
+    params={"minimum_height": SAFE_VELOCITY_MIN_PELVIS_HEIGHT_M},
+  )
+  cfg.terminations["nonfoot_ground_contact"] = TerminationTermCfg(
+    func=mdp.illegal_contact,
+    params={
+      "sensor_name": nonfoot_ground_sensor.name,
+      "force_threshold": 10.0,
+    },
+  )
 
   # Replace unconditional nominal tracking with the same reward shape evaluated
   # against a depth-conditioned safe twist. This preserves free-space locomotion
@@ -223,6 +316,51 @@ def unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunne
   return cfg
 
 
+def unitree_g1_safe_velocity_depth_stop_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+  scene_manifest: str | Path | None = None,
+  scene_spawn_point: str | None = None,
+  nominal_command: tuple[float, float, float] | None = None,
+) -> ManagerBasedRlEnvCfg:
+  """Create a manifest-driven blind locomotion task behind a depth stop layer."""
+  cfg = unitree_g1_safe_velocity_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+    scene_manifest=scene_manifest,
+    scene_spawn_point=scene_spawn_point,
+  )
+  if play:
+    if nominal_command is None and scene_manifest is None:
+      _set_safe_velocity_play_command(cfg, scenario_id)
+    else:
+      _set_safe_velocity_play_twist(
+        cfg,
+        nominal_command or (0.5, 0.0, 0.0),
+      )
+  cfg.observations["actor"].terms["command"] = ObservationTermCfg(
+    func=adapted_velocity_command,
+    params={
+      "command_name": "twist",
+      "sensor_name": G1_3DGS_DEPTH_SENSOR,
+      "adapter_cfg": _safe_velocity_depth_stop_cfg(),
+      "debug_print": play,
+    },
+  )
+  cfg.rewards["safe_velocity_tracking"].params["adapter_cfg"] = (
+    _safe_velocity_depth_stop_cfg()
+  )
+  cfg.observations.pop("camera")
+  return cfg
+
+
+def unitree_g1_safe_velocity_depth_stop_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Reuse the frozen-compatible blind G1 actor for depth-only stopping."""
+  cfg = unitree_g1_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_depth_stop"
+  return cfg
+
+
 def unitree_g1_safe_velocity_blind_3dgs_env_cfg(
   play: bool = False,
   scenario_id: str = "both_open",
@@ -262,13 +400,17 @@ def unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRunnerC
 
 def _safe_velocity_local_geometry_sensors(
   play: bool,
+  isolate_from_camera: bool = False,
 ) -> tuple[RayCastSensorCfg, ...]:
   """Build a pelvis-frame collision-truth ray fan ordered left to right."""
   sensors = []
+  sensor_cfg_type = (
+    CollisionTruthRaySensorCfg if isolate_from_camera else RayCastSensorCfg
+  )
   for index, angle_deg in enumerate(_LOCAL_GEOMETRY_RAY_ANGLES_DEG):
     angle_rad = math.radians(angle_deg)
     sensors.append(
-      RayCastSensorCfg(
+      sensor_cfg_type(
         name=f"{SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX}{index:02d}",
         frame=ObjRef(type="body", name="pelvis", entity="robot"),
         pattern=GridPatternCfg(
@@ -331,20 +473,195 @@ def unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg() -> RslRlOnPolicyRu
   return cfg
 
 
+def unitree_g1_safe_velocity_privileged_stop_gate_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+) -> ManagerBasedRlEnvCfg:
+  """Gate a stable locomotion actor with privileged stop/clear geometry."""
+  cfg = unitree_g1_safe_velocity_privileged_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+  )
+  sensor_names = tuple(
+    sensor.name
+    for sensor in cfg.scene.sensors
+    if sensor.name.startswith(SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX)
+  )
+  params = {
+    "command_name": "twist",
+    "sensor_names": sensor_names,
+    "adapter_cfg": _safe_velocity_adapter_cfg(SAFE_VELOCITY_SCENARIO_CATALOG),
+  }
+  cfg.observations["actor"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedStopCommand,
+    params=params,
+  )
+  cfg.observations["critic"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedStopCommand,
+    params=params,
+  )
+  return cfg
+
+
+def unitree_g1_safe_velocity_privileged_stop_gate_3dgs_ppo_runner_cfg() -> (
+  RslRlOnPolicyRunnerCfg
+):
+  """Load the privileged warm-start actor for stop-gate evaluation only."""
+  cfg = unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_privileged_stop_gate"
+  return cfg
+
+
+def unitree_g1_safe_velocity_safety_teacher_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+) -> ManagerBasedRlEnvCfg:
+  """Expose continuous collision-truth labels for the future visual student."""
+  cfg = unitree_g1_safe_velocity_privileged_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+  )
+  if play:
+    _set_safe_velocity_play_command(cfg, scenario_id)
+  sensor_names = tuple(
+    sensor.name
+    for sensor in cfg.scene.sensors
+    if sensor.name.startswith(SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX)
+  )
+  teacher_cfg = SafeVelocitySafetyTeacherCfg()
+  params = {
+    "command_name": "twist",
+    "sensor_names": sensor_names,
+    "teacher_cfg": teacher_cfg,
+  }
+  cfg.observations["actor"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedSafetyCommand,
+    params={**params, "debug_print": play},
+  )
+  cfg.observations["critic"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedSafetyCommand,
+    params=params,
+  )
+  cfg.observations["safety_teacher"] = ObservationGroupCfg(
+    terms={
+      "labels": ObservationTermCfg(
+        func=SafeVelocityPrivilegedSafetyLabels,
+        params=params,
+      )
+    },
+    concatenate_terms=True,
+    enable_corruption=False,
+  )
+  cfg.rewards["safe_velocity_tracking"] = RewardTermCfg(
+    func=SafeVelocitySafetyTeacherTrackingReward,
+    weight=2.0,
+    params={
+      **params,
+      "linear_std": math.sqrt(0.25),
+      "angular_std": math.sqrt(0.5),
+    },
+  )
+  return cfg
+
+
+def unitree_g1_safe_velocity_safety_teacher_3dgs_ppo_runner_cfg() -> (
+  RslRlOnPolicyRunnerCfg
+):
+  """Keep the teacher task checkpoint-compatible with the privileged warm-start."""
+  cfg = unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_safety_teacher"
+  return cfg
+
+
+def unitree_g1_safe_velocity_vision_data_3dgs_env_cfg(
+  play: bool = False,
+  scenario_id: str = "both_open",
+  *,
+  isolate_teacher_rays: bool = True,
+) -> ManagerBasedRlEnvCfg:
+  """Pair temporal 3DGS input with collision-truth safety supervision."""
+  cfg = unitree_g1_safe_velocity_3dgs_env_cfg(
+    play=play,
+    scenario_id=scenario_id,
+  )
+  if play:
+    _set_safe_velocity_play_command(cfg, scenario_id)
+  ray_sensors = _safe_velocity_local_geometry_sensors(
+    play=play, isolate_from_camera=isolate_teacher_rays
+  )
+  cfg.scene.sensors += ray_sensors
+  params = {
+    "command_name": "twist",
+    "sensor_names": tuple(sensor.name for sensor in ray_sensors),
+    "teacher_cfg": SafeVelocitySafetyTeacherCfg(),
+  }
+  cfg.observations["actor"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedSafetyCommand,
+    params={**params, "debug_print": play},
+  )
+  cfg.observations["critic"].terms["command"] = ObservationTermCfg(
+    func=SafeVelocityPrivilegedSafetyCommand,
+    params=params,
+  )
+  cfg.observations["safety_teacher"] = ObservationGroupCfg(
+    terms={
+      "labels": ObservationTermCfg(
+        func=SafeVelocityPrivilegedSafetyLabels,
+        params=params,
+      )
+    },
+    concatenate_terms=True,
+    enable_corruption=False,
+  )
+  cfg.rewards["safe_velocity_tracking"] = RewardTermCfg(
+    func=SafeVelocitySafetyTeacherTrackingReward,
+    weight=2.0,
+    params={
+      **params,
+      "linear_std": math.sqrt(0.25),
+      "angular_std": math.sqrt(0.5),
+    },
+  )
+  return cfg
+
+
+def unitree_g1_safe_velocity_vision_data_3dgs_ppo_runner_cfg() -> (
+  RslRlOnPolicyRunnerCfg
+):
+  """Keep temporal images and labels outside the frozen locomotion MLP."""
+  cfg = unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg()
+  cfg.experiment_name = "g1_3dgs_safe_velocity_vision_data"
+  return cfg
+
+
 __all__ = [
   "SAFE_VELOCITY_ADAPTER_TASK_ID",
   "SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS",
   "SAFE_VELOCITY_BLIND_TASK_ID",
   "SAFE_VELOCITY_COLLISION_SENSOR_PREFIX",
+  "SAFE_VELOCITY_DEPTH_STOP_TASK_ID",
   "SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX",
+  "SAFE_VELOCITY_MIN_PELVIS_HEIGHT_M",
+  "SAFE_VELOCITY_NONFOOT_GROUND_SENSOR",
   "SAFE_VELOCITY_PRIVILEGED_TASK_ID",
+  "SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID",
+  "SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID",
   "SAFE_VELOCITY_TASK_ID",
+  "SAFE_VELOCITY_VISION_DATA_TASK_ID",
   "unitree_g1_safe_velocity_blind_3dgs_env_cfg",
   "unitree_g1_safe_velocity_blind_3dgs_ppo_runner_cfg",
   "unitree_g1_safe_velocity_3dgs_env_cfg",
   "unitree_g1_safe_velocity_3dgs_ppo_runner_cfg",
   "unitree_g1_safe_velocity_adapter_3dgs_env_cfg",
   "unitree_g1_safe_velocity_adapter_3dgs_ppo_runner_cfg",
+  "unitree_g1_safe_velocity_depth_stop_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_depth_stop_3dgs_ppo_runner_cfg",
   "unitree_g1_safe_velocity_privileged_3dgs_env_cfg",
   "unitree_g1_safe_velocity_privileged_3dgs_ppo_runner_cfg",
+  "unitree_g1_safe_velocity_privileged_stop_gate_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_privileged_stop_gate_3dgs_ppo_runner_cfg",
+  "unitree_g1_safe_velocity_safety_teacher_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_safety_teacher_3dgs_ppo_runner_cfg",
+  "unitree_g1_safe_velocity_vision_data_3dgs_env_cfg",
+  "unitree_g1_safe_velocity_vision_data_3dgs_ppo_runner_cfg",
 ]

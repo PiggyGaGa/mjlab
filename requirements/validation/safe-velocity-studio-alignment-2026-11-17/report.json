@@ -1,0 +1,313 @@
+{
+  "date": "2026-11-17T19:02:12.214964+08:00",
+  "scope": "Studio 3DGS depth versus collision group-1 depth alignment",
+  "scene_manifest": "/home/liana/SSD/Ubuntu/robot/mjlab/src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json",
+  "scene_spawn_prefix": "safe_velocity_generalization_",
+  "seed": 0,
+  "criteria": {
+    "cutoff_distance_m": 5.0,
+    "tolerance_m": 0.15,
+    "minimum_collision_pixels": 20,
+    "minimum_gaussian_coverage": 0.9,
+    "minimum_aligned_fraction": 0.8,
+    "overlay_scale": 8,
+    "raw_depth_saved": false
+  },
+  "summary": {
+    "total": 6,
+    "accepted": 0,
+    "all_accepted": false,
+    "minimum_gaussian_coverage": 0.5570776255707762,
+    "minimum_aligned_fraction": 0.0
+  },
+  "results": [
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_00",
+      "camera": {
+        "root_position_w": [
+          -0.800000011920929,
+          -0.6000000238418579,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.9732490181922913,
+          0.0,
+          0.0,
+          0.22975292801856995
+        ],
+        "camera_position_w": [
+          -0.7319908738136292,
+          -0.565995454788208,
+          1.24399995803833
+        ],
+        "camera_rotation_w": [
+          [
+            0.44721361994743347,
+            0.305911660194397,
+            -0.8404867649078369
+          ],
+          [
+            -0.8944271802902222,
+            0.1529558151960373,
+            -0.42024344205856323
+          ],
+          [
+            -2.4145474952774748e-08,
+            0.9396927952766418,
+            0.34201961755752563
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 183,
+      "collision_pixel_fraction": 0.0595703125,
+      "jointly_valid_pixels": 154,
+      "gaussian_coverage": 0.8415300546448088,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.0154578685760498,
+      "absolute_error_median_m": 1.0154578685760498,
+      "absolute_error_p90_m": 1.49431574344635
+    },
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_01",
+      "camera": {
+        "root_position_w": [
+          0.699999988079071,
+          -0.699999988079071,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.2915894687175751,
+          0.0,
+          0.0,
+          0.9565435647964478
+        ],
+        "camera_position_w": [
+          0.6368933916091919,
+          -0.6575840711593628,
+          1.24399995803833
+        ],
+        "camera_rotation_w": [
+          [
+            0.5578360557556152,
+            -0.28385961055755615,
+            0.7798991203308105
+          ],
+          [
+            0.8299511671066284,
+            0.19079092144966125,
+            -0.5241945385932922
+          ],
+          [
+            1.1235684382882027e-08,
+            0.9396927952766418,
+            0.3420197069644928
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 219,
+      "collision_pixel_fraction": 0.0712890625,
+      "jointly_valid_pixels": 122,
+      "gaussian_coverage": 0.5570776255707762,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.141929268836975,
+      "absolute_error_median_m": 1.141929268836975,
+      "absolute_error_p90_m": 1.5578114986419678
+    },
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_02",
+      "camera": {
+        "root_position_w": [
+          -0.6000000238418579,
+          0.699999988079071,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.8859737515449524,
+          0.0,
+          0.0,
+          -0.4637354016304016
+        ],
+        "camera_position_w": [
+          -0.556666910648346,
+          0.6375196576118469,
+          1.24399995803833
+        ],
+        "camera_rotation_w": [
+          [
+            -0.8217146992683411,
+            0.19491666555404663,
+            -0.5355298519134521
+          ],
+          [
+            -0.5698989033699036,
+            -0.2810426354408264,
+            0.7721593379974365
+          ],
+          [
+            -1.6768577637549242e-08,
+            0.9396926760673523,
+            0.3420196771621704
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 159,
+      "collision_pixel_fraction": 0.0517578125,
+      "jointly_valid_pixels": 100,
+      "gaussian_coverage": 0.6289308176100629,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.142336368560791,
+      "absolute_error_median_m": 1.142336368560791,
+      "absolute_error_p90_m": 1.3536924123764038
+    },
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_03",
+      "camera": {
+        "root_position_w": [
+          0.800000011920929,
+          0.5,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.38268348574638367,
+          0.0,
+          0.0,
+          -0.9238796234130859
+        ],
+        "camera_position_w": [
+          0.7462340593338013,
+          0.4462340772151947,
+          1.2439998388290405
+        ],
+        "camera_rotation_w": [
+          [
+            -0.7071067690849304,
+            -0.24184444546699524,
+            0.6644631028175354
+          ],
+          [
+            0.7071067094802856,
+            -0.24184446036815643,
+            0.6644631028175354
+          ],
+          [
+            -4.617415783059187e-09,
+            0.9396927356719971,
+            0.3420196771621704
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 138,
+      "collision_pixel_fraction": 0.044921875,
+      "jointly_valid_pixels": 96,
+      "gaussian_coverage": 0.6956521739130435,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.2441316843032837,
+      "absolute_error_median_m": 1.2441316843032837,
+      "absolute_error_p90_m": 1.422573208808899
+    },
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_04",
+      "camera": {
+        "root_position_w": [
+          -0.8999999761581421,
+          0.10000000149011612,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.9876827597618103,
+          0.0,
+          0.0,
+          -0.15647034347057343
+        ],
+        "camera_position_w": [
+          -0.8276866674423218,
+          0.07649818062782288,
+          1.24399995803833
+        ],
+        "camera_rotation_w": [
+          [
+            -0.30908602476119995,
+            0.3252723515033722,
+            -0.8936797976493835
+          ],
+          [
+            -0.9510340094566345,
+            -0.10571348667144775,
+            0.29044586420059204
+          ],
+          [
+            -1.1659111009976186e-08,
+            0.9396927356719971,
+            0.3420196771621704
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 289,
+      "collision_pixel_fraction": 0.09407552083333333,
+      "jointly_valid_pixels": 190,
+      "gaussian_coverage": 0.657439446366782,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.3405479192733765,
+      "absolute_error_median_m": 1.3405479192733765,
+      "absolute_error_p90_m": 1.8828306198120117
+    },
+    {
+      "spawn_point": "safe_velocity_generalization_pillar_05",
+      "camera": {
+        "root_position_w": [
+          0.5,
+          0.8999999761581421,
+          0.7799999713897705
+        ],
+        "root_quaternion_wxyz": [
+          0.18302778899669647,
+          0.0,
+          0.0,
+          -0.9831077456474304
+        ],
+        "camera_position_w": [
+          0.4290578067302704,
+          0.8726365566253662,
+          1.24399995803833
+        ],
+        "camera_rotation_w": [
+          [
+            -0.359872043132782,
+            -0.31910499930381775,
+            0.8767349123954773
+          ],
+          [
+            0.933001697063446,
+            -0.12308330833911896,
+            0.3381691873073578
+          ],
+          [
+            -8.236398230110353e-09,
+            0.9396927952766418,
+            0.3420197069644928
+          ]
+        ]
+      },
+      "accepted": false,
+      "collision_pixels": 431,
+      "collision_pixel_fraction": 0.14029947916666666,
+      "jointly_valid_pixels": 350,
+      "gaussian_coverage": 0.8120649651972158,
+      "aligned_fraction": 0.0,
+      "signed_error_median_m": 1.5611389875411987,
+      "absolute_error_median_m": 1.5611389875411987,
+      "absolute_error_p90_m": 1.860217809677124
+    }
+  ],
+  "overlay_legend": {
+    "green": "collision pixel with Gaussian depth within tolerance",
+    "red": "collision pixel with Gaussian depth outside tolerance",
+    "magenta": "collision pixel without valid Gaussian depth",
+    "grayscale": "inverse Gaussian depth outside collision projection"
+  }
+}

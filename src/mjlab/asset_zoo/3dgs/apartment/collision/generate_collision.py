@@ -5,9 +5,11 @@ Run from the repository root with uv run and this script's path.
 
 import json
 from pathlib import Path
+from typing import cast
 from xml.etree import ElementTree as ET
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy import ndimage
 
 from mjlab.scene.gaussian_splat import _read_ply_vertices
@@ -30,7 +32,7 @@ def merge_surface_boxes(occupied: np.ndarray) -> list[tuple[np.ndarray, np.ndarr
   remains covered. Added cells must be within MAX_SURFACE_EXPANSION of the source
   occupancy; the density threshold prevents bounding whole sparse structures.
   """
-  distance = ndimage.distance_transform_edt(~occupied) * VOXEL_SIZE
+  distance = cast(np.ndarray, ndimage.distance_transform_edt(~occupied)) * VOXEL_SIZE
   boxes: list[tuple[np.ndarray, np.ndarray]] = []
 
   def partition(indices: np.ndarray) -> None:
@@ -103,7 +105,7 @@ def main() -> None:
   counts = np.zeros(tuple(shape), dtype=np.int32)
   np.add.at(counts, tuple(indices.T), 1)
   occupied = counts >= 3
-  labels, _ = ndimage.label(occupied)
+  labels, _ = cast(tuple[NDArray[np.int32], int], ndimage.label(occupied))
   component_sizes = np.bincount(labels.ravel())
   occupied &= component_sizes[labels] >= 8
   voxel_count = int(occupied.sum())

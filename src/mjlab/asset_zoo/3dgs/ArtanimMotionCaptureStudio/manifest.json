@@ -25,6 +25,66 @@
       "name": "default",
       "position": [0.0, 0.0, 0.0],
       "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]
+    },
+    {
+      "name": "safe_velocity_pillar_00",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.981210211, 0.0, 0.0, 0.192941758]
+    },
+    {
+      "name": "safe_velocity_pillar_01",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.2577736, 0.0, 0.0, 0.966205346]
+    },
+    {
+      "name": "safe_velocity_pillar_02",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.878215643, 0.0, 0.0, -0.478264868]
+    },
+    {
+      "name": "safe_velocity_pillar_03",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.41785681, 0.0, 0.0, -0.908512898]
+    },
+    {
+      "name": "safe_velocity_pillar_04",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.982997482, 0.0, 0.0, -0.183619037]
+    },
+    {
+      "name": "safe_velocity_pillar_05",
+      "position": [0.0, 0.0, 0.0],
+      "quaternion_wxyz": [0.07437623, 0.0, 0.0, -0.997230252]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_00",
+      "position": [-0.8, -0.6, 0.0],
+      "quaternion_wxyz": [0.973248989, 0.0, 0.0, 0.229752921]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_01",
+      "position": [0.7, -0.7, 0.0],
+      "quaternion_wxyz": [0.291589457, 0.0, 0.0, 0.956543563]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_02",
+      "position": [-0.6, 0.7, 0.0],
+      "quaternion_wxyz": [0.885973747, 0.0, 0.0, -0.463735399]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_03",
+      "position": [0.8, 0.5, 0.0],
+      "quaternion_wxyz": [0.382683432, 0.0, 0.0, -0.923879533]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_04",
+      "position": [-0.9, 0.1, 0.0],
+      "quaternion_wxyz": [0.987682659, 0.0, 0.0, -0.156470335]
+    },
+    {
+      "name": "safe_velocity_generalization_pillar_05",
+      "position": [0.5, 0.9, 0.0],
+      "quaternion_wxyz": [0.183027787, 0.0, 0.0, -0.98310774]
     }
   ]
 }

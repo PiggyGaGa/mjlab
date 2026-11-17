@@ -1,0 +1,29 @@
+{
+  "scope": "First slowdown depth-source diagnostic; visible groups 1/2 only",
+  "scenario": "free",
+  "seed": 1,
+  "step": 218,
+  "time_s": 4.36,
+  "clearance_m": 1.3928253650665283,
+  "alpha": 0.9928253889083862,
+  "heading_w": 1.5363397598266602,
+  "camera_position_w": [0.13960474729537964, -0.6309032440185547, 1.2252748012542725],
+  "near_roi_pixels": 108,
+  "near_world_xyz_quantiles": [
+    [1.4200026988983154, 0.27809131145477295, 0.18314862251281738],
+    [1.4326926469802856, 0.4023200273513794, 0.6869805455207825],
+    [1.546637773513794, 0.572844386100769, 1.3256090879440308]
+  ],
+  "fraction_near_ground": 0.0,
+  "visible_mesh_depth_match_pixels": 108,
+  "matching_visible_geoms": {"pillar_01": 108},
+  "diagnostic": {
+    "rollout_steps": 225,
+    "depth_roi_vertical_fraction": [0.2, 0.85],
+    "near_depth_threshold_m": 1.4,
+    "visible_mesh_query_groups": [1, 2],
+    "mesh_axial_depth_match_tolerance_m": 0.03,
+    "world_xyz_quantile_levels": [0.0, 0.5, 1.0],
+    "near_ground_absolute_world_z_limit_m": 0.15
+  }
+}

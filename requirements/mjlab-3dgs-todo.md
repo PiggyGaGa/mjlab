@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-11-12
+最后更新：2026-11-17
 
 ## 0. 项目总览
 
@@ -15,7 +15,7 @@
 | P4 | 外部碰撞输入 | **MVP 完成，阶段收口** | 接收 P8 后续泛化资产作替换对照 |
 | P5 | 统一场景资产 | **完成** | 为 P7/P8 提供稳定场景契约 |
 | P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
-| P7 | 3DGS 安全感知速度跟踪 | P7-0/P7-1/P7-2 完成；P7-3 进行中 | 重新训练并验收 privileged 遇障停车基线 |
+| P7 | 3DGS 安全感知速度跟踪 | 规则深度安全层及 36 组场景验证完成，按当前范围收口 | 学习式感知安全层（另行开展） |
 | P8 | 自动碰撞生成 | apartment 场景专用几何原型完成 | 泛化几何算法、可替换语义前端与质量评估 |
 | P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
@@ -39,7 +39,7 @@ mjlab 3DGS
 │   └── P8 3DGS 自动碰撞代理生成                   [场景专用原型完成；待泛化]
 ├── 视觉闭环训练
 │   ├── P6 YAM Vision → G1 depth observation       [完成]
-│   ├── P7 3DGS 安全感知速度跟踪               [准备中；MDP 未开始]
+│   ├── P7 3DGS 安全感知速度跟踪               [规则基线场景验证完成；学习式后续]
 │   └── 单台阶、楼梯、复杂地形与间隙               [后续扩展]
 └── 质量与论文
     ├── P10 测试、文档、性能和发布                 [部分完成]
@@ -821,7 +821,9 @@ P7 的首要目标是：G1 根据 nominal velocity command、本体状态和时�
 必要时原地旋转搜索无碰撞方向，然后朝安全方向恢复速度跟踪。任务不定义为
 导航，不要求世界坐标目标，也不假设 LiDAR、VIO、SLAM 或其他定位传感器。
 方法参考 Hiking in the Wild 的 G1 深度感知关节控制和位置到速度命令设计，
-但不声称复现其算法。
+以及 PHP 的 privileged teacher → depth student 路线，但不声称复现其算法。
+当前主线不再让视觉或真值几何直接重训29维低层 Actor，而是训练安全速度学生
+并冻结已验证的 locomotion Actor。
 
 P7 的详细任务、接口、指标和完成条件以
 `mjlab-3dgs-safe-velocity.md` 为准。本节只跟踪项目进度，不能替代该
@@ -870,12 +872,122 @@ P7 的详细任务、接口、指标和完成条件以
   基线已用既有 checkpoint 完成六场景 × seed 0/1/2 的正式规则验收：18/18
   outcome 符合 catalog，均无 base-link 障碍接触和跌倒，最小前向传感净空
   0.792 m。该指标不是精确 geometry 净空，学习策略效果仍归 P7-3/P7-4。
+- [x] 保留全部 Blind、端到端 Privileged、stop-only、Stop-Gate 配置与实验
+  记录作为论文证据；失败方案只标记为 failed/superseded/diagnostic，不覆盖
+  task id、run name 或 checkpoint 元数据。删除本地大型产物前需用户确认。
+- [x] 完成 P7-4A：新增 task-local 连续 privileged safety teacher，以前向
+  collision truth 输出 clearance/validity/alpha/stop 标签和 safe command；标签
+  位于独立 observation group，不进入 actor/critic，旧硬 Stop-Gate 保持不变。
+  第三版 stop `0.4 m`、slow `1.4 m` 已由用户 GUI 确认无碰撞稳定停车；首版低速
+  死区和第二版碰撞重置结果保留为失败证据。
+- [ ] 接入 P6 时序 depth+validity Student，先进行加权监督学习；若 rollout
+  发生状态分布偏移再增加 DAgger，不在该阶段微调 locomotion Actor。已新增
+  `Mjlab-Velocity-Safe-Vision-Data-Unitree-G1-3DGS`，把 `(B, 7, 2, 48, 64)` robust
+  3DGS observation 与四维 collision-truth label 配对，且二者均不进入 frozen
+  locomotion actor/critic；chunked collector 已通过 2-sample CPU smoke，保存
+  camera/label/command/measured/reset 并生成带 checkpoint hash 的 manifest。
+  多环境重建场景已修正为在 MuJoCo Warp 隔离 world 中使用 scene-local 零 origin，
+  不再把机器人平移出固定 collision/3DGS；4 world × 30 step CPU collector runtime
+  已验证零 termination、pelvis 稳定、ray clearance 一致且 camera corruption 独立。
+  4 world × 200 step GPU teacher rollout 也已生成 800 samples，零 termination，
+  并逐 world 精确复现单环境高度、clearance、alpha 和最终停车速度；并行 origin
+  修复验收通过。4 world nominal rollout 进一步生成 596 samples 和 44 个可达
+  stop positives，零 termination；collector 可按 stop-positive 数量在下一动作前
+  自动结束。`dead_end` 也在 127/500 steps 自动生成 508 samples/44 positives，
+  零 termination，并覆盖 alpha 0 的 command-zero 区域。`left_open` 在 108/500
+  steps 自动生成 432 samples/44 positives，零 termination，且四个 world 各得到
+  11 个 positive；`right_open` 使用相同配置得到完全相同的汇总和逐 world 标签
+  范围，左右对称性验收通过。`free` teacher rollout 已生成 800 个 alpha 恒为
+  1.0 的纯负样本，四个 world 各 200 个连续样本且零 termination，可用于训练时
+  约束自由空间误减速。属于 test split 的 `false_alarm` 也已生成 800 个 alpha
+  恒为 1.0 的纯负样本，零 termination，只用于误停车评估。task-local Student、
+  split-enforcing chunk loader、非对称 alpha/加权 stop 损失和独立训练入口已实现；
+  真实 split 的 1-epoch CPU smoke 已完成反向传播、best/last checkpoint 和一次性
+  test evaluation。首个 50-epoch `offline_seed0_v1` 在 held-out test 上得到 alpha
+  MAE 0.20688、误停率 0.1970、漏停率 0.9091，已标记为失败并保留。逐场景诊断
+  确认 `false_alarm` 零误停，错误集中在未见墙面布局 `dead_end`；global average
+  pooling 丢失左右/前方位置是主要结构问题。v2 已复用现有 SpatialSoftmax 保留
+  空间位置，并由 alpha 连续导出 stop，消除两个输出不一致；真实 split 的
+  1-epoch smoke 及逐场景报告通过。v2 的 50-epoch GPU run 在 `false_alarm` 保持
+  零误停，但 `dead_end` alpha MAE 0.53730、误停率 0.9978，仍未通过。几何审计
+  确认 dead-end spawn 距前墙 1.4 m，truth ray、camera depth、pelvis 高度和接触
+  状态均正常；失败来自固定柱体训练轨迹无法泛化至整墙，而非出生点穿墙。该结论
+  促使主线改用显式前向深度几何阈值；墙面训练布局不再是首版部署的必要条件，
+  Student 只保留为可选学习对照。旧共享 RenderContext 把
+  camera `[1,2]`
+  与 ray `[1,3]` 合并为 `[1,2,3]`，所以首版数据只标记为 mesh/collision-assisted
+  + 3DGS 对照；2026-11-17 新采集路径在任务侧隔离教师射线，见下文。
 - [ ] 通过关闭、冻结或错配视觉，以及改变障碍布局的测试，验证视觉依赖；
   不因机器人能在平地跟踪速度就宣称策略学会了视觉避障。
 - [ ] 报告 free-space 跟踪误差、碰撞/跌倒率、制动距离、停止净空、左右
   安全侧选择率、搜索/恢复成功率、dead-end 停车率、不必要停车/旋转率及
   端到端 SPS；不报告目标到达率、路径效率或 SPL。
 - [ ] P8 资产通过几何/接触检查后，固定视觉和评估协议进行碰撞替换消融。
+- [x] Depth-Stop 配置支持在环境创建前传入 scene manifest、spawn point 和固定
+  nominal command，并从所选 collision MJCF 动态生成除地面外的 base-link
+  障碍接触传感器。第二地图 `ArtanimMotionCaptureStudio` 配置回归确认加载其
+  PLY/MJCF/default spawn 和六根柱体，且不残留 apartment geom 名称；单环境真实
+  reset/step 也通过。该资产的视觉—碰撞未对齐，真实跨地图安全行为仍待新资产验证。
+- [x] 新增 `scripts/tools/play_safe_velocity_map.py`，在环境创建前用 manifest、spawn
+  和 nominal command 构建 Depth-Stop 配置，再复用标准 `run_play` 和 viewer；
+  避免通用 `play --scene-manifest` 的构建后覆盖留下旧地图接触传感器。配置通过
+  进程级临时 task 注册，`run_play` 及其它共享播放代码不变。播放/配置回归
+  `42 passed`，脚本帮助、ruff、ty、pyright 通过。
+- [x] P7-5 runner 支持自定义 manifest、spawn、nominal command、allowed region
+  和显式 expected outcome。Studio default 的 seed 0/1/2 GPU 矩阵 3/3 达到
+  `safe_blocked_stop`，最小深度净空 `0.864--0.905 m`，均零碰撞、跌倒和
+  termination；seed 2 路径达到 `2.703 m`，仍需检查漂移。该结果不关闭
+  视觉—碰撞对齐验收。
+- [x] Studio manifest 增加 `safe_velocity_pillar_00--05` 六个同点异向验收 spawn；
+  它们均从 `(0, 0, 0)` 出生并分别正对 collision MJCF 中的六根柱体，原
+  `default` 不变。几何回归验证 yaw 误差不超过 `1e-6 rad`。同一 checkpoint、
+  seed 0 的 GPU 矩阵 6/6 达到 `safe_blocked_stop`，最小深度净空
+  `0.856--0.884 m`，均零碰撞、跌倒和 termination。该结果关闭多朝向行为验收，
+  但不关闭 collision overlay 和视觉—碰撞严格对齐检查。
+- [x] 在不删除同点组的前提下，增加
+  `safe_velocity_generalization_pillar_00--05` 六个异位置、异朝向 spawn，距各自
+  目标柱体 `3.35--4.21 m`。几何回归验证位置唯一、非原点、目标距离和朝向。
+  同一 checkpoint、seed 0 的 GPU 矩阵 6/6 达到 `safe_blocked_stop`，路径长
+  `2.288--3.183 m`、最小深度净空 `0.847--0.890 m`，均零碰撞、跌倒和
+  termination。后续仍需多 seed 和新地图验证，不能把本结果扩大解释为完整泛化。
+- [x] runner 新增 `--scene-spawn-prefix`，按 manifest 顺序批量选择 spawn 并与 seed
+  形成验收矩阵；原单点参数不变。矩阵 summary 汇总碰撞、跌倒、termination、
+  净空、路径和时长范围。六个泛化 spawn × seed 0/1/2 的 GPU 矩阵 18/18 达到
+  `safe_blocked_stop`，均零碰撞、跌倒和 termination；最小净空 `0.709 m`，路径
+  `2.286--3.296 m`，接受时间 `6.78--9.14 s`。后续工作转向跨地图和
+  视觉—碰撞对齐验证。
+- [x] 新增 Gaussian-only 与 collision-only 同相机位姿深度对齐 runner，并对
+  Studio 六个泛化 spawn 生成定量报告和放大 overlay。默认 `0.15 m` 容差下结果
+  0/6：Gaussian 覆盖率 `0.557--0.841`、对齐比例全部为 0、中位绝对误差
+  `1.015--1.561 m`。这些柱体是额外可视 mesh，不要求在原始 3DGS 内对应；
+  0/6 仅保留为历史诊断，撤销用它否定 18/18 可视柱体停车结果的解释。
+- [x] 相机输入契约明确为 3DGS + 可视 mesh；group 3 只用于物理与教师。
+  Vision-Data 默认采用任务侧直接碰撞射线，排除共享渲染组污染；旧采集路径可用
+  `--legacy-shared-render-context` 显式复现。manifest 记录视觉来源及隔离状态。
+  alignment runner 默认 group 3，仅作为离线参考；group 1 可选用于历史诊断。
+  CPU 双 world G1 采集 4 samples、零 termination，新旧教师标签完全一致，
+  相机张量 79,520 个值不同；合成动态隐藏障碍验证标签刷新与视觉隔离。
+  GPU 吞吐和正式采集待验证，证据见 visual-isolation 验证记录。
+- [x] Depth-Stop 主线验收“可见深度调速、pelvis 接触事件判碰撞”。apartment
+  和 Studio 配置均不挂载教师射线、相机仅 group 1/2、障碍接触传感器覆盖
+  一个控制步历史。双 world 隐藏墙体回归覆盖接触/无接触隔离、分离后接触清除
+  与短暂撞击历史保留；整个过程相机深度不受隐藏墙体影响。证据归入
+  `validation/safe-velocity-visual-isolation-2026-11-17.md`。
+- [x] 完成真实 G1 checkpoint 的 GPU 可见深度/接触矩阵，实际 camera BVH 仅
+  group 1/2、无共享教师 ray。修正停车计时为连续静止 1 s，保留旧判据首轮和
+  新判据复验。严格复验 apartment 15/18、Studio 18/18，障碍停车 30/30，
+  全部零 pelvis 接触/跌倒/termination。净空最小为 0.6786/0.7131 m，停车末尾
+  连续静止 1.00--1.02 s。完整 trace 和说明位于
+  `validation/safe-velocity-depth-contact-2026-11-17/`。
+- [x] 2026-11-17 按用户决定，将本轮规则基线及 36 组场景验证标记完成并收口，
+  不再追加场景、复测矩阵或为追求全通过继续调参。结果固定为 33/36，障碍
+  停车 30/30、零介入跟踪 3/6，全部零 pelvis 接触/跌倒/termination。
+  free/seed 1、2 和 false_alarm/seed 1 的轻微减速作为已知限制归档，未视为
+  已修复，也不将其重新标记通过。全部 trace、失败记录和旧实验继续保留。
+
+历史扩展设想（本轮不执行）：侧方障碍/通行区域敏感性、其它失败项逐像素归因、
+Studio 重建障碍 collision 对齐与新增地图验收。它们不再是本项完成的前置条件；
+后续如需重新开展场景测试，需用户明确提出。
 
 ### 7.1 后续扩展：单级台阶、楼梯与地形行走
 
@@ -1042,9 +1154,10 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 
 ## 13. 推荐执行顺序
 
-1. 当前主线推进 P7，用已校验的 apartment 视觉/碰撞资产建立安全感知速度
-   跟踪 MDP：完成制动、停车、原地旋转搜索、安全选向和恢复跟踪，并比较
-   blind、规则 adapter、privileged、mesh vision 和 3DGS vision。
+1. 当前主线推进 P7：先标定 collision-truth 连续安全教师，再用 P6 时序
+   depth+validity 监督训练安全速度 Student，并在冻结 locomotion Actor 后比较
+   blind、规则 adapter、teacher、mesh vision 和 3DGS vision。转向搜索与局部
+   目标选择在稳定停车验收后继续，不阻塞首个视觉安全闭环。
 2. P8 并行将 apartment 专用 voxel/box 原型泛化为场景无关的几何基线，
    再设计可替换语义前端；保留 voxel/mesh 对照，不以完整语义模型复现
    阻塞 P7。
@@ -1053,6 +1166,30 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 
 ## 14. 更新记录
 
+- 2026-11-17：明确深度来源为 3DGS 和可视 mesh，隐藏 group 3 仅用于物理和
+  教师。Vision-Data 使用任务侧原生直接射线，避免共享 RenderContext 合并污染，
+  保留显式旧路径与所有历史产物。修正 Studio group-1 柱体的验收解释，0/6
+  不再作为可视柱体停车失败证据。共享 play/sensor/simulation 无新增修改。
+
+- 2026-11-14：结合 Hiking in the Wild 与 PHP 调整 P7-4 主线。端到端
+  Privileged 低层 PPO 作为失败诊断完整保留，不再用增加迭代修复；新增独立
+  continuous safety teacher task，以真值前向射线输出 normalized clearance、
+  validity、速度缩放 `alpha`、stop label，并用 `alpha` 平滑缩放 nominal
+  command。teacher label 不进入 actor/critic，稳定 locomotion actor 保持冻结。
+  首版阈值为 stop `0.8 m`、slow `1.8 m`；同日将 stop 调整为 `0.4 m`。play
+  模式现以 1 Hz 打印 nominal/safe/measured velocity、前向
+  净空、`alpha` 和 stop，并固定使用场景协议的 nominal command，不再随机采样
+  训练速度；训练模式不打印且仍保留原采样范围。固定命令 GUI 回放在
+  `safe_vx=0.204 m/s`、`clearance=0.972 m`、`alpha=0.409`、`stop=False` 时已停止，
+  后续日志又在 `safe_vx=0.192 m/s`、`clearance=0.939 m`、`alpha=0.385` 时确认
+  `measured_vx≈0`。这说明冻结 actor 存在低速步态死区；第二版将 slow 收近为
+  `1.0 m`，预计实际停止位置约 `0.64 m`。视觉 Student、数据采集和 DAgger
+  仍属于下一交付物。
+  第二版 GUI 回放在 `0.699--0.735 m` 仍有正向实测速度，随后重复跳回出生净空，
+  用户确认该 reset 发生在机器人碰撞障碍物后，说明第二版制动距离不足。第三版
+  slow 改为 `1.4 m`，预计在约 `0.80 m` 进入低速死区；stop 仍为 `0.4 m`，等待
+  GUI 无碰撞停车验收。用户随后确认第三版验证通过。play 诊断仍会在 reset 当步
+  立即输出 episode step 和具体 termination 名称。
 - 2026-11-12：启动 P7-3。新增 renderer-free blind 与 privileged local-geometry
   task，均复用冻结 apartment collision、标准 G1 joint action 和 MLP PPO。blind
   保持 99/109 维 observation，不创建 Gaussian asset/camera；privileged 用
@@ -1061,6 +1198,46 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
   1-update smoke 均通过，分别为 33/31 SPS，loss 有限。正式训练预算、标准 G1
   checkpoint warm-start、free tracking 和多场景局部避障效果尚未验收，P7-3
   保持进行中。
+- 2026-11-15：将后续主目标收敛为基于深度几何阈值的通用速度安全层，而不是
+  识别墙、柱或场景类别。新增独立 `Safe-Depth-Stop` 任务，对完整前向 ROI 使用
+  q10 稳健净空，并以 `0.4 m` stop、`1.4 m` full-speed 连续缩放 nominal
+  command；该路径只减速/停车，不主动转向。原 Adapter 搜索路径和 Student v1/v2
+  失败实验均保留。合成墙/柱等价、无效深度停车及配置隔离定向回归为
+  `70 passed`；真实 GUI 墙/柱/其它障碍回放与时序滤波决策待完成。
+  随后 GUI 已确认柱体在约 `0.923 m`、墙面在约 `0.819 m` 净空无碰撞停车；
+  `false_alarm` 在冻结 10 秒窗口内 alpha 恒为 1 且保持全速，窗口外遇到真实障碍
+  后才减速停车。新任务进一步增加默认关闭的 `0.5 m/s` 绝对前向速度上限，使
+  更大的 nominal 指令不能放大已验收的制动曲线；合成 `2.0 m/s` 指令测试覆盖
+  free/brake/stop 输出。
+  针对整图 q10 可能忽略细障碍的问题，离线六场景筛选后新增 7 帧 clearance
+  中位数、`1/4` 宽重叠滑窗和窗内 q20，仅 Depth-Stop 任务启用。离线结果在
+  `free/false_alarm` 零误停、四个障碍布局零漏停；合成约占全图 3.4% 的窄障碍
+  已从全速改为 alpha 0.5，单帧异常被时间中位数抑制。仍需重新 GUI 验证既有三
+  场景，并增加真实细障碍夹具后才能关闭该项。
+  三场景 GUI 回归随后通过：`false_alarm` 前 500 step 保持全速且零 termination，
+  双柱和 dead-end 墙面分别在约 `0.696 m`、`0.732 m` 净空稳定停车且无碰撞。
+  现有半径 `0.18 m` 圆柱已是冻结资产中的窄障碍，不修改已验收资产。P7-5 runner
+  已新增 `--controller depth_stop` 多场景/多 seed 模式，并允许 evaluator 把
+  BRAKE/STOP/BLOCKED 的持续静止识别为安全停车；正式 GPU 矩阵待运行。
+  相同 Blind `model_99.pt` 的 `false_alarm` 5-step CPU smoke 已成功加载并生成
+  JSON trace，结果 continuous tracking、零介入/碰撞/termination；该结果仅验收
+  runner 接线。
+- 2026-11-15：启动跨地图解耦。Depth-Stop 工厂新增可选 scene manifest、spawn
+  和 nominal command 输入，并在环境构建前从所选 collision MJCF 生成 base-link
+  障碍接触传感器；默认 apartment 注册任务和旧实验保持不变。仓库内 Studio
+  manifest 的第二地图配置回归和真实 reset/step 验证六根柱体且无 apartment geom
+  泄漏。由于 Studio 随机碰撞柱体尚无视觉匹配，该结果只关闭配置装配，不关闭
+  跨地图 GUI 行为验收。
+- 2026-11-15：新增 manifest-aware 安全速度 GUI 播放工具。该工具先构建所选地图
+  的完整 Depth-Stop env config，再注册为仅当前播放进程可见的任务并调用标准
+  `run_play`，使 viewer、checkpoint 加载和 alpha 诊断可直接复用，同时避免构建后
+  替换地图导致旧 contact sensor 残留。通用 play 代码与默认路径不变；下一步等待
+  视觉/碰撞对齐的新 manifest 做 GUI 停车矩阵。
+- 2026-11-15：结构化 runner 同步支持 manifest-aware 自定义地图。首个 Studio
+  default/seed 0 探针在 4.74 s 无碰撞进入安全静止，证明同一深度门控和冻结 actor
+  可以跨 manifest 复用；随后 seed 0/1/2 矩阵 3/3 安全停车且零碰撞/跌倒/
+  termination。由于仍只有单 spawn 且 collision overlay 尚未逐点验收，不宣称
+  完整跨地图泛化。
 - 2026-11-12：P7-3 首轮 64-env GPU 吞吐探针发现通用 G1 `command_vel`
   curriculum 会在首次 reset 覆盖 safe-velocity catalog 的 `0.0--0.8 m/s`
   forward-only 命令。现已仅在 safe-velocity 任务中关闭该 curriculum，保证各
@@ -1113,6 +1290,15 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
   重新执行 100-update 校准并验证无碰撞稳定停车。纯逻辑、真实 reset/step 和
   2-env CPU 1-update smoke 已通过；smoke 的 value/surrogate loss 分别为
   `0.0453`/`-0.0542`，action std 保持 `0.15`。
+- 2026-11-13：4096-env、5000-update Privileged 长训练的后期 telemetry 虽显示
+  平均回报约 59.7、episode length 1000 且记录跌倒为零，deterministic playback
+  中机器人仍无法站稳；同配置下 warm-start 可站稳。最终 actor MLP 相对
+  warm-start 漂移约 21.8%，该 run 全部作废。新增独立 privileged stop-gate，
+  只在 observation 边界用 collision ray 将 nominal command 切换为原命令或零，
+  复用稳定 warm-start 而不微调关节策略；同时增加 pelvis 低于 0.5 m 和非足端
+  着地终止。该任务属于 collision-truth oracle。CPU deterministic 验收中，
+  `both_open` 在 0.98 秒触发停车并稳定保持至 22 秒，`free` 10 秒内无误停车；
+  两者均无终止且 pelvis 最低高度约 0.753 m。下一步用户 GUI 回放确认行为。
 - 2026-11-12：P7-2 完成。六类 catalog 场景增加预期 outcome 与有限评估窗口；
   根据旧 locomotion checkpoint 的多 seed 偏航响应，将规则 adapter 搜索预算从
   12 秒重新标定为 18 秒，障碍场景最长评估 22 秒。`model_29999.pt` 在六场景 ×

@@ -1,30 +1,55 @@
 """Configuration and protocol tests for safe perceptive velocity tracking."""
 
+import math
+from pathlib import Path
+
 import mujoco
+import numpy as np
 import pytest
 import torch
 from conftest import get_test_device
+from run_g1_3dgs_safe_velocity_adapter import (
+  acceptance_matrix,
+  matching_scene_spawn_points,
+)
+from run_g1_3dgs_safe_velocity_alignment import (
+  depth_alignment_metrics,
+)
 
 from mjlab.envs import ManagerBasedRlEnv
+from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.rl import RslRlOnPolicyRunnerCfg
 from mjlab.scene import load_scene_manifest
 from mjlab.sensor import CameraSensorCfg, ContactSensorCfg, ObjRef, RayCastSensorCfg
 from mjlab.tasks.g1_3dgs import G1_3DGS_DEPTH_SENSOR
 from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
+from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.config.g1.safe_velocity import (
   SAFE_VELOCITY_ADAPTER_TASK_ID,
   SAFE_VELOCITY_ALLOWED_CONTACT_GEOMS,
   SAFE_VELOCITY_BLIND_TASK_ID,
   SAFE_VELOCITY_COLLISION_SENSOR_PREFIX,
+  SAFE_VELOCITY_DEPTH_STOP_TASK_ID,
   SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX,
+  SAFE_VELOCITY_MIN_PELVIS_HEIGHT_M,
+  SAFE_VELOCITY_NONFOOT_GROUND_SENSOR,
+  SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID,
   SAFE_VELOCITY_PRIVILEGED_TASK_ID,
+  SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID,
   SAFE_VELOCITY_TASK_ID,
+  SAFE_VELOCITY_VISION_DATA_TASK_ID,
   unitree_g1_safe_velocity_3dgs_env_cfg,
   unitree_g1_safe_velocity_adapter_3dgs_env_cfg,
+  unitree_g1_safe_velocity_depth_stop_3dgs_env_cfg,
 )
 from mjlab.tasks.velocity.config.g1.safe_velocity_baseline import (
+  SafeVelocityDepthAdapterCfg,
   SafeVelocityLocalGeometryTrackingReward,
+  SafeVelocityPrivilegedSafetyCommand,
+  SafeVelocityPrivilegedSafetyLabels,
+  SafeVelocityPrivilegedStopCommand,
+  SafeVelocitySafetyTeacherTrackingReward,
   SafeVelocityTrackingReward,
   adapted_velocity_command,
   safe_velocity_base_obstacle_collision_cost,
@@ -35,6 +60,19 @@ from mjlab.tasks.velocity.config.g1.safe_velocity_scenarios import (
   SAFE_VELOCITY_SCENARIO_CATALOG,
 )
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
+
+_STUDIO_MANIFEST = (
+  Path(__file__).parents[1]
+  / "src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/manifest.json"
+)
+_STUDIO_GENERALIZATION_POSITIONS = (
+  (-0.8, -0.6, 0.0),
+  (0.7, -0.7, 0.0),
+  (-0.6, 0.7, 0.0),
+  (0.8, 0.5, 0.0),
+  (-0.9, 0.1, 0.0),
+  (0.5, 0.9, 0.0),
+)
 
 
 @pytest.fixture(scope="module")
@@ -147,6 +185,219 @@ def test_safe_velocity_factory_applies_deterministic_spawn(scenario_id: str) -> 
   }
 
 
+def test_depth_stop_factory_derives_collision_sensors_from_selected_map() -> None:
+  manifest = load_scene_manifest(_STUDIO_MANIFEST)
+  spawn = next(item for item in manifest.spawn_points if item.name == "default")
+  cfg = unitree_g1_safe_velocity_depth_stop_3dgs_env_cfg(
+    play=True,
+    scene_manifest=_STUDIO_MANIFEST,
+    scene_spawn_point="default",
+    nominal_command=(0.4, 0.0, 0.0),
+  )
+
+  assert cfg.scene.terrain is not None
+  assert cfg.scene.terrain.mjcf_path == str(manifest.collision.path)
+  assert cfg.scene.gaussian_splats is not None
+  assert cfg.scene.gaussian_splats.assets[0].path == str(manifest.visual.path)
+  assert cfg.scene.spawn_position == spawn.position
+  assert cfg.scene.spawn_quaternion_wxyz == spawn.quaternion_wxyz
+
+  collision_sensors = tuple(
+    sensor
+    for sensor in cfg.scene.sensors or ()
+    if sensor.name.startswith(SAFE_VELOCITY_COLLISION_SENSOR_PREFIX)
+  )
+  assert tuple(
+    sensor.secondary.pattern
+    for sensor in collision_sensors
+    if isinstance(sensor, ContactSensorCfg) and sensor.secondary is not None
+  ) == tuple(f"pillar_{index:02d}" for index in range(6))
+  assert not any(
+    "surface_" in sensor.secondary.pattern
+    for sensor in collision_sensors
+    if isinstance(sensor, ContactSensorCfg) and sensor.secondary is not None
+  )
+
+  twist = cfg.commands["twist"]
+  assert isinstance(twist, UniformVelocityCommandCfg)
+  assert twist.ranges.lin_vel_x == (0.4, 0.4)
+  assert twist.ranges.lin_vel_y == (0.0, 0.0)
+  assert twist.ranges.ang_vel_z == (0.0, 0.0)
+  assert twist.rel_forward_envs == 0.0
+  assert cfg.observations["actor"].terms["command"].func is adapted_velocity_command
+  assert "camera" not in cfg.observations
+
+
+@pytest.mark.parametrize("pillar_index", range(6))
+def test_studio_safe_velocity_spawns_share_origin_and_face_pillars(
+  pillar_index: int,
+) -> None:
+  manifest = load_scene_manifest(_STUDIO_MANIFEST)
+  spawn = next(
+    item
+    for item in manifest.spawn_points
+    if item.name == f"safe_velocity_pillar_{pillar_index:02d}"
+  )
+  spec = mujoco.MjSpec.from_file(str(manifest.collision.path))
+  pillar = next(
+    geom for geom in spec.geoms if geom.name == f"pillar_{pillar_index:02d}"
+  )
+
+  assert spawn.position == (0.0, 0.0, 0.0)
+  w, x, y, z = spawn.quaternion_wxyz
+  spawn_yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+  target_yaw = math.atan2(float(pillar.pos[1]), float(pillar.pos[0]))
+  yaw_error = math.atan2(
+    math.sin(spawn_yaw - target_yaw),
+    math.cos(spawn_yaw - target_yaw),
+  )
+  assert yaw_error == pytest.approx(0.0, abs=1.0e-6)
+
+
+@pytest.mark.parametrize(
+  ("pillar_index", "expected_position"),
+  enumerate(_STUDIO_GENERALIZATION_POSITIONS),
+)
+def test_studio_generalization_spawns_vary_position_and_face_pillars(
+  pillar_index: int,
+  expected_position: tuple[float, float, float],
+) -> None:
+  manifest = load_scene_manifest(_STUDIO_MANIFEST)
+  spawn = next(
+    item
+    for item in manifest.spawn_points
+    if item.name == f"safe_velocity_generalization_pillar_{pillar_index:02d}"
+  )
+  spec = mujoco.MjSpec.from_file(str(manifest.collision.path))
+  pillar = next(
+    geom for geom in spec.geoms if geom.name == f"pillar_{pillar_index:02d}"
+  )
+
+  assert spawn.position == expected_position
+  assert len(set(_STUDIO_GENERALIZATION_POSITIONS)) == 6
+  assert spawn.position != (0.0, 0.0, 0.0)
+  w, x, y, z = spawn.quaternion_wxyz
+  spawn_yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+  delta_x = float(pillar.pos[0]) - spawn.position[0]
+  delta_y = float(pillar.pos[1]) - spawn.position[1]
+  target_yaw = math.atan2(delta_y, delta_x)
+  yaw_error = math.atan2(
+    math.sin(spawn_yaw - target_yaw),
+    math.cos(spawn_yaw - target_yaw),
+  )
+  assert math.hypot(delta_x, delta_y) > 3.0
+  assert yaw_error == pytest.approx(0.0, abs=1.0e-6)
+
+
+def test_manifest_spawn_prefix_selects_generalization_group_in_order() -> None:
+  assert matching_scene_spawn_points(
+    _STUDIO_MANIFEST,
+    "safe_velocity_generalization_",
+  ) == tuple(f"safe_velocity_generalization_pillar_{index:02d}" for index in range(6))
+
+
+def test_acceptance_matrix_reports_safety_and_trajectory_ranges() -> None:
+  reports = []
+  for index, accepted in enumerate((True, False)):
+    reports.append(
+      {
+        "scenario": {"id": "free"},
+        "scene_spawn_point": f"spawn_{index}",
+        "seed": index,
+        "summary": {
+          "outcome": "safe_blocked_stop" if accepted else "collision",
+          "expected_outcome": "safe_blocked_stop",
+          "accepted": accepted,
+          "terminated": not accepted,
+          "trajectory": {
+            "duration_s": 4.0 + index,
+            "path_length_m": 1.0 + index,
+            "min_sensor_clearance_m": 0.8 + index * 0.1,
+            "collision": not accepted,
+            "fall": False,
+          },
+        },
+      }
+    )
+
+  summary = acceptance_matrix(reports)
+
+  assert summary["total"] == 2
+  assert summary["accepted"] == 1
+  assert summary["all_accepted"] is False
+  assert summary["collision_count"] == 1
+  assert summary["fall_count"] == 0
+  assert summary["termination_count"] == 1
+  assert summary["min_clearance_m"] == pytest.approx(0.8)
+  assert summary["max_path_length_m"] == pytest.approx(2.0)
+  assert summary["failures"][0]["scene_spawn_point"] == "spawn_1"
+
+
+def test_depth_alignment_metrics_requires_collision_depth_agreement() -> None:
+  collision = np.zeros((4, 4), dtype=np.float32)
+  collision[1:3, 1:3] = 1.0
+  aligned_gaussian = collision.copy()
+  aligned = depth_alignment_metrics(
+    aligned_gaussian,
+    collision,
+    cutoff_distance_m=5.0,
+    tolerance_m=0.15,
+    minimum_collision_pixels=4,
+    minimum_gaussian_coverage=0.9,
+    minimum_aligned_fraction=0.8,
+  )
+  mismatched_gaussian = collision.copy()
+  mismatched_gaussian[1:3, 1:3] = 2.0
+  mismatched = depth_alignment_metrics(
+    mismatched_gaussian,
+    collision,
+    cutoff_distance_m=5.0,
+    tolerance_m=0.15,
+    minimum_collision_pixels=4,
+    minimum_gaussian_coverage=0.9,
+    minimum_aligned_fraction=0.8,
+  )
+
+  assert aligned["accepted"] is True
+  assert aligned["aligned_fraction"] == 1.0
+  assert aligned["absolute_error_median_m"] == 0.0
+  assert mismatched["accepted"] is False
+  assert mismatched["gaussian_coverage"] == 1.0
+  assert mismatched["aligned_fraction"] == 0.0
+
+
+@pytest.mark.slow
+def test_depth_stop_selected_map_resets_and_steps(device: str) -> None:
+  cfg = unitree_g1_safe_velocity_depth_stop_3dgs_env_cfg(
+    play=True,
+    scene_manifest=_STUDIO_MANIFEST,
+    scene_spawn_point="default",
+    nominal_command=(0.4, 0.0, 0.0),
+  )
+  cfg.scene.num_envs = 1
+  cfg.observations["actor"].terms["command"].params["debug_print"] = False
+
+  env = ManagerBasedRlEnv(cfg=cfg, device=device)
+  try:
+    observations, _ = env.reset(seed=0)
+    actor = observations["actor"]
+    assert isinstance(actor, torch.Tensor)
+    assert actor.shape == (1, 99)
+    assert torch.isfinite(actor).all()
+    assert all(
+      f"{SAFE_VELOCITY_COLLISION_SENSOR_PREFIX}{index}" in env.scene.sensors
+      for index in range(6)
+    )
+
+    observations, rewards, *_ = env.step(torch.zeros((1, 29), device=device))
+    actor = observations["actor"]
+    assert isinstance(actor, torch.Tensor)
+    assert torch.isfinite(actor).all()
+    assert torch.isfinite(rewards).all()
+  finally:
+    env.close()
+
+
 def test_safe_velocity_task_reuses_velocity_action_and_camera() -> None:
   cfg = load_env_cfg(SAFE_VELOCITY_TASK_ID)
   runner = load_rl_cfg(SAFE_VELOCITY_TASK_ID)
@@ -163,7 +414,7 @@ def test_safe_velocity_task_reuses_velocity_action_and_camera() -> None:
   assert "command_vel" not in cfg.curriculum
   assert isinstance(cfg.actions["joint_pos"], JointPositionActionCfg)
   assert "push_robot" not in cfg.events
-  assert cfg.scene.env_spacing == 12.0
+  assert cfg.scene.env_spacing == 0.0
   assert any(sensor.name == G1_3DGS_DEPTH_SENSOR for sensor in cfg.scene.sensors or ())
   assert tuple(cfg.observations["camera"].terms) == ("depth_validity",)
   forbidden_actor_terms = {
@@ -258,6 +509,37 @@ def test_safe_velocity_adapter_does_not_mutate_learning_task() -> None:
   )
 
 
+def test_safe_velocity_depth_stop_is_shape_independent_stop_only_task() -> None:
+  cfg = load_env_cfg(SAFE_VELOCITY_DEPTH_STOP_TASK_ID)
+  play_cfg = load_env_cfg(SAFE_VELOCITY_DEPTH_STOP_TASK_ID, play=True)
+  runner = load_rl_cfg(SAFE_VELOCITY_DEPTH_STOP_TASK_ID)
+  command_term = cfg.observations["actor"].terms["command"]
+  play_command_term = play_cfg.observations["actor"].terms["command"]
+  adapter_cfg = command_term.params["adapter_cfg"]
+  reward_adapter_cfg = cfg.rewards["safe_velocity_tracking"].params["adapter_cfg"]
+
+  assert command_term.func is adapted_velocity_command
+  assert isinstance(adapter_cfg, SafeVelocityDepthAdapterCfg)
+  assert adapter_cfg.stop_only
+  assert adapter_cfg.stop_clearance_m == 0.4
+  assert adapter_cfg.collision_risk_distance_m == 1.4
+  assert adapter_cfg.clearance_sector_indices == (0, 1, 2)
+  assert adapter_cfg.clearance_quantile == 0.2
+  assert adapter_cfg.vertical_roi == (0.2, 0.85)
+  assert adapter_cfg.horizontal_window_fraction == 0.25
+  assert adapter_cfg.temporal_median_window == 7
+  assert adapter_cfg.maximum_forward_speed_m_s == 0.5
+  assert isinstance(reward_adapter_cfg, SafeVelocityDepthAdapterCfg)
+  assert reward_adapter_cfg.stop_only
+  assert command_term.params["debug_print"] is False
+  assert play_command_term.params["debug_print"] is True
+  assert "camera" not in cfg.observations
+  assert any(sensor.name == G1_3DGS_DEPTH_SENSOR for sensor in cfg.scene.sensors or ())
+  assert isinstance(runner, RslRlOnPolicyRunnerCfg)
+  assert runner.actor.class_name == "MLPModel"
+  assert runner.experiment_name == "g1_3dgs_safe_velocity_depth_stop"
+
+
 def test_safe_velocity_blind_baseline_is_renderer_free() -> None:
   cfg = load_env_cfg(SAFE_VELOCITY_BLIND_TASK_ID)
   runner = load_rl_cfg(SAFE_VELOCITY_BLIND_TASK_ID)
@@ -324,12 +606,123 @@ def test_safe_velocity_privileged_baseline_exposes_only_local_geometry() -> None
   assert runner.algorithm.num_learning_epochs == 2
 
 
+def test_safe_velocity_tasks_terminate_on_collapsed_posture() -> None:
+  cfg = load_env_cfg(SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID)
+  ground_sensor = next(
+    sensor
+    for sensor in cfg.scene.sensors
+    if sensor.name == SAFE_VELOCITY_NONFOOT_GROUND_SENSOR
+  )
+
+  assert isinstance(ground_sensor, ContactSensorCfg)
+  assert ground_sensor.primary.exclude == (
+    "left_ankle_roll_link",
+    "right_ankle_roll_link",
+  )
+  pelvis_too_low = cfg.terminations["pelvis_too_low"]
+  assert pelvis_too_low.func is envs_mdp.root_height_below_minimum
+  assert pelvis_too_low.params["minimum_height"] == SAFE_VELOCITY_MIN_PELVIS_HEIGHT_M
+  nonfoot_contact = cfg.terminations["nonfoot_ground_contact"]
+  assert nonfoot_contact.func is mdp.illegal_contact
+  assert nonfoot_contact.params["sensor_name"] == ground_sensor.name
+
+
+def test_privileged_stop_gate_reuses_local_geometry_without_actor_retraining() -> None:
+  cfg = load_env_cfg(SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID)
+  runner = load_rl_cfg(SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID)
+  actor_command = cfg.observations["actor"].terms["command"]
+  critic_command = cfg.observations["critic"].terms["command"]
+
+  assert actor_command.func is SafeVelocityPrivilegedStopCommand
+  assert critic_command.func is SafeVelocityPrivilegedStopCommand
+  assert actor_command.params["sensor_names"] == critic_command.params["sensor_names"]
+  assert len(actor_command.params["sensor_names"]) == 9
+  assert runner.experiment_name == "g1_3dgs_safe_velocity_privileged_stop_gate"
+
+
+def test_safety_teacher_exposes_labels_without_actor_leakage() -> None:
+  cfg = load_env_cfg(SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID)
+  play_cfg = load_env_cfg(SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID, play=True)
+  runner = load_rl_cfg(SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID)
+  actor_command = cfg.observations["actor"].terms["command"]
+  critic_command = cfg.observations["critic"].terms["command"]
+  teacher_labels = cfg.observations["safety_teacher"].terms["labels"]
+
+  assert actor_command.func is SafeVelocityPrivilegedSafetyCommand
+  assert critic_command.func is SafeVelocityPrivilegedSafetyCommand
+  assert teacher_labels.func is SafeVelocityPrivilegedSafetyLabels
+  assert actor_command.params["teacher_cfg"].stop_distance_m == 0.4
+  assert actor_command.params["teacher_cfg"].slow_distance_m == 1.4
+  assert actor_command.params["debug_print"] is False
+  assert play_cfg.observations["actor"].terms["command"].params["debug_print"] is True
+  assert "debug_print" not in critic_command.params
+  assert "debug_print" not in teacher_labels.params
+  play_twist = play_cfg.commands["twist"]
+  assert isinstance(play_twist, UniformVelocityCommandCfg)
+  expected_command = SAFE_VELOCITY_SCENARIO_CATALOG.scenario(
+    "both_open"
+  ).nominal_command
+  assert play_twist.ranges.lin_vel_x == (expected_command[0],) * 2
+  assert play_twist.ranges.lin_vel_y == (expected_command[1],) * 2
+  assert play_twist.ranges.ang_vel_z == (expected_command[2],) * 2
+  assert play_twist.rel_forward_envs == 0.0
+  assert "safety_teacher" not in runner.obs_groups["actor"]
+  assert "safety_teacher" not in runner.obs_groups["critic"]
+  assert cfg.rewards["safe_velocity_tracking"].func is (
+    SafeVelocitySafetyTeacherTrackingReward
+  )
+  assert runner.experiment_name == "g1_3dgs_safe_velocity_safety_teacher"
+
+
+def test_vision_data_task_pairs_temporal_input_with_teacher_labels() -> None:
+  cfg = load_env_cfg(SAFE_VELOCITY_VISION_DATA_TASK_ID)
+  play_cfg = load_env_cfg(SAFE_VELOCITY_VISION_DATA_TASK_ID, play=True)
+  runner = load_rl_cfg(SAFE_VELOCITY_VISION_DATA_TASK_ID)
+  assert isinstance(runner, RslRlOnPolicyRunnerCfg)
+  rays = tuple(
+    sensor
+    for sensor in cfg.scene.sensors
+    if sensor.name.startswith(SAFE_VELOCITY_LOCAL_GEOMETRY_SENSOR_PREFIX)
+  )
+
+  assert cfg.scene.gaussian_splats is not None
+  assert len(rays) == 9
+  assert all(isinstance(sensor, RayCastSensorCfg) for sensor in rays)
+  camera = cfg.observations["camera"]
+  assert camera.history_length == 7
+  assert camera.flatten_history_dim is False
+  assert tuple(camera.terms) == ("depth_validity",)
+  assert camera.terms["depth_validity"].params["enable_corruption"] is True
+  assert (
+    play_cfg.observations["camera"].terms["depth_validity"].params["enable_corruption"]
+    is False
+  )
+  assert "local_geometry" not in cfg.observations["actor"].terms
+  assert "local_geometry" not in cfg.observations["critic"].terms
+  assert cfg.observations["actor"].terms["command"].func is (
+    SafeVelocityPrivilegedSafetyCommand
+  )
+  assert cfg.observations["safety_teacher"].terms["labels"].func is (
+    SafeVelocityPrivilegedSafetyLabels
+  )
+  assert runner.actor.class_name == "MLPModel"
+  assert runner.critic.class_name == "MLPModel"
+  assert "camera" not in runner.obs_groups["actor"]
+  assert "safety_teacher" not in runner.obs_groups["actor"]
+  assert "camera" not in runner.obs_groups["critic"]
+  assert "safety_teacher" not in runner.obs_groups["critic"]
+  assert runner.experiment_name == "g1_3dgs_safe_velocity_vision_data"
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
   ("task_id", "actor_shape", "critic_shape"),
   [
     (SAFE_VELOCITY_BLIND_TASK_ID, 99, 109),
     (SAFE_VELOCITY_PRIVILEGED_TASK_ID, 117, 127),
+    (SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID, 117, 127),
+    (SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID, 117, 127),
+    (SAFE_VELOCITY_VISION_DATA_TASK_ID, 99, 109),
   ],
 )
 def test_safe_velocity_learning_baselines_reset_and_step(
@@ -352,8 +745,33 @@ def test_safe_velocity_learning_baselines_reset_and_step(
     assert critic.shape == (1, critic_shape)
     assert torch.isfinite(actor).all()
     assert torch.isfinite(critic).all()
-    if task_id == SAFE_VELOCITY_PRIVILEGED_TASK_ID:
+    if task_id in (
+      SAFE_VELOCITY_PRIVILEGED_TASK_ID,
+      SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID,
+      SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID,
+    ):
       torch.testing.assert_close(actor[:, -9:], torch.ones_like(actor[:, -9:]))
+    if task_id == SAFE_VELOCITY_PRIVILEGED_STOP_GATE_TASK_ID:
+      term_cfg = env.observation_manager.get_term_cfg("actor", "command")
+      term = term_cfg.func
+      assert isinstance(term, SafeVelocityPrivilegedStopCommand)
+      assert term.last_command is not None
+      assert term.last_stop is not None
+      torch.testing.assert_close(actor[:, 96:99], term.last_command)
+    if task_id in (
+      SAFE_VELOCITY_SAFETY_TEACHER_TASK_ID,
+      SAFE_VELOCITY_VISION_DATA_TASK_ID,
+    ):
+      labels = observations["safety_teacher"]
+      assert isinstance(labels, torch.Tensor)
+      assert labels.shape == (1, 4)
+      assert torch.isfinite(labels).all()
+      assert torch.all((labels[:, 1:] >= 0.0) & (labels[:, 1:] <= 1.0))
+    if task_id == SAFE_VELOCITY_VISION_DATA_TASK_ID:
+      camera = observations["camera"]
+      assert isinstance(camera, torch.Tensor)
+      assert camera.shape == (1, 7, 2, 48, 64)
+      assert torch.isfinite(camera).all()
 
     observations, rewards, *_ = env.step(torch.zeros((1, 29), device=device))
     actor = observations["actor"]

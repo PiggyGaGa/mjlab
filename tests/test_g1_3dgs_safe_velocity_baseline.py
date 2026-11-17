@@ -14,12 +14,14 @@ from mjlab.tasks.velocity.config.g1.safe_velocity_baseline import (
   SafeVelocityDepthAdapter,
   SafeVelocityDepthAdapterCfg,
   SafeVelocityOutcome,
+  SafeVelocitySafetyTeacherCfg,
   SafeVelocityTrajectoryEvaluator,
   SafeVelocityTrajectoryEvaluatorCfg,
   SafeVelocityTrajectorySample,
   classify_safe_velocity_outcome,
   local_geometry_depth_validity_from_ray_distances,
   local_geometry_stop_command,
+  privileged_safety_teacher,
   safe_velocity_base_obstacle_collision_cost,
 )
 
@@ -144,6 +146,165 @@ def test_disabled_adapter_is_exact_passthrough() -> None:
   assert adapter.intervention_count.item() == 0
 
 
+def test_stop_only_adapter_uses_geometry_not_obstacle_shape() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    vertical_roi=(0.0, 1.0),
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+  )
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+  wall = _observation(2.0, 2.0, 2.0)
+  pillar = wall.clone()
+  wall[:, 0, :2, :] = 0.9 / 5.0
+  pillar[:, 0, 3:9, 4:8] = 0.9 / 5.0
+
+  wall_result = adapter.step(wall, nominal, dt=0.1)
+  pillar_result = adapter.step(pillar, nominal, dt=0.1)
+
+  assert wall_result.mode.item() == SafeVelocityAdapterMode.BRAKE
+  assert pillar_result.mode.item() == SafeVelocityAdapterMode.BRAKE
+  assert wall_result.command[0, 0].item() == pytest.approx(0.25)
+  torch.testing.assert_close(pillar_result.command, wall_result.command)
+
+
+def test_stop_only_adapter_never_searches_or_introduces_turning() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+  )
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+  obstacle = _observation(0.3, 0.3, 0.3)
+
+  first = adapter.step(obstacle, nominal, dt=0.1)
+  second = adapter.step(obstacle, nominal, dt=0.1)
+
+  assert first.mode.item() == SafeVelocityAdapterMode.STOP
+  assert second.mode.item() == SafeVelocityAdapterMode.STOP
+  assert torch.count_nonzero(first.command) == 0
+  assert torch.count_nonzero(second.command) == 0
+  assert first.search_elapsed_s.item() == 0.0
+  assert second.search_elapsed_s.item() == 0.0
+
+
+def test_stop_only_adapter_stops_for_invalid_selected_depth() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+  )
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+
+  result = adapter.step(_observation(5.0, 5.0, 5.0, valid=False), nominal, dt=0.1)
+
+  assert result.mode.item() == SafeVelocityAdapterMode.STOP
+  assert torch.count_nonzero(result.command) == 0
+
+
+def test_stop_only_adapter_caps_large_nominal_speed_before_scaling() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+    maximum_forward_speed_m_s=0.5,
+  )
+  large_nominal = torch.tensor([[2.0, 0.0, 0.0]])
+
+  clear = adapter.step(_observation(2.0, 2.0, 2.0), large_nominal, dt=0.1)
+  braking = adapter.step(_observation(0.9, 0.9, 0.9), large_nominal, dt=0.1)
+  stopped = adapter.step(_observation(0.3, 0.3, 0.3), large_nominal, dt=0.1)
+
+  assert clear.command[0, 0].item() == pytest.approx(0.5)
+  assert braking.command[0, 0].item() == pytest.approx(0.25)
+  assert torch.count_nonzero(stopped.command) == 0
+
+
+def test_stop_only_adapter_preserves_legacy_uncapped_default() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    stop_only=True,
+  )
+  nominal = torch.tensor([[2.0, 0.0, 0.0]])
+
+  result = adapter.step(_observation(2.0, 2.0, 2.0), nominal, dt=0.1)
+
+  torch.testing.assert_close(result.command, nominal)
+
+
+def test_local_depth_window_detects_thin_obstacle_missed_by_global_q10() -> None:
+  observation = torch.ones((1, 2, 48, 64))
+  observation[:, 0] = 2.0 / 5.0
+  observation[:, 0, 10:36, 30:34] = 0.9 / 5.0
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+  global_adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    clearance_quantile=0.1,
+    vertical_roi=(0.0, 1.0),
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+  )
+  local_adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    clearance_quantile=0.2,
+    vertical_roi=(0.2, 0.85),
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+    horizontal_window_fraction=0.25,
+  )
+
+  global_result = global_adapter.step(observation, nominal, dt=0.1)
+  local_result = local_adapter.step(observation, nominal, dt=0.1)
+
+  torch.testing.assert_close(global_result.command, nominal)
+  assert local_result.mode.item() == SafeVelocityAdapterMode.BRAKE
+  assert local_result.command[0, 0].item() == pytest.approx(0.25)
+
+
+def test_temporal_median_rejects_transient_and_accepts_persistent_obstacle() -> None:
+  adapter = _adapter(
+    collision_risk_distance_m=1.4,
+    stop_clearance_m=0.4,
+    search_trigger_distance_m=0.8,
+    clearance_quantile=0.2,
+    vertical_roi=(0.2, 0.85),
+    stop_only=True,
+    clearance_sector_indices=(0, 1, 2),
+    horizontal_window_fraction=0.25,
+    temporal_median_window=7,
+  )
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+  clear = torch.ones((1, 2, 48, 64))
+  clear[:, 0] = 2.0 / 5.0
+  obstacle = clear.clone()
+  obstacle[:, 0, 10:36, 30:34] = 0.9 / 5.0
+  for _ in range(4):
+    adapter.step(clear, nominal, dt=0.1)
+
+  transient = adapter.step(obstacle, nominal, dt=0.1)
+  for _ in range(2):
+    adapter.step(obstacle, nominal, dt=0.1)
+  persistent = adapter.step(obstacle, nominal, dt=0.1)
+
+  torch.testing.assert_close(transient.command, nominal)
+  assert persistent.mode.item() == SafeVelocityAdapterMode.BRAKE
+  assert persistent.command[0, 0].item() == pytest.approx(0.25)
+
+
 def test_local_geometry_treats_raycast_miss_as_known_clear() -> None:
   distances = torch.tensor(
     [[-1.0, 0.5, float("nan"), float("inf")]],
@@ -227,6 +388,69 @@ def test_local_geometry_stop_command_is_conservative_for_invalid_front() -> None
 
   assert stop.item()
   torch.testing.assert_close(command, torch.zeros_like(nominal))
+
+
+def test_privileged_safety_teacher_scales_commands_continuously() -> None:
+  cfg = SafeVelocitySafetyTeacherCfg()
+  nominal = torch.tensor(
+    [
+      [0.6, 0.0, 0.3],
+      [0.6, 0.0, 0.3],
+      [0.6, 0.0, 0.3],
+    ]
+  )
+  observation = torch.cat(
+    (
+      _observation(2.0, 2.0, 2.0),
+      _observation(2.0, 0.9, 2.0),
+      _observation(2.0, 0.3, 2.0),
+    )
+  )
+
+  output = privileged_safety_teacher(observation, nominal, cfg)
+
+  torch.testing.assert_close(output.speed_scale, torch.tensor([1.0, 0.5, 0.0]))
+  torch.testing.assert_close(output.command[0], nominal[0])
+  torch.testing.assert_close(output.command[1], nominal[1] * 0.5)
+  torch.testing.assert_close(output.command[2], torch.zeros(3))
+  assert output.stop.tolist() == [False, False, True]
+  assert output.front_valid.tolist() == [True, True, True]
+  torch.testing.assert_close(
+    output.labels(cfg.cutoff_distance_m),
+    torch.tensor(
+      [
+        [0.4, 1.0, 1.0, 0.0],
+        [0.18, 1.0, 0.5, 0.0],
+        [0.06, 1.0, 0.0, 1.0],
+      ]
+    ),
+  )
+
+
+def test_privileged_safety_teacher_stops_on_unknown_front_geometry() -> None:
+  cfg = SafeVelocitySafetyTeacherCfg()
+  nominal = torch.tensor([[0.8, 0.0, -0.6]])
+  observation = _observation(5.0, 5.0, 5.0)
+  observation[:, 1, :, 4] = 0.0
+
+  output = privileged_safety_teacher(observation, nominal, cfg)
+
+  assert not output.front_valid.item()
+  assert output.front_clearance_m.item() == 0.0
+  assert output.stop.item()
+  torch.testing.assert_close(output.command, torch.zeros_like(nominal))
+
+
+def test_privileged_safety_teacher_labels_reachable_low_speed_as_stop() -> None:
+  cfg = SafeVelocitySafetyTeacherCfg()
+  nominal = torch.tensor([[0.5, 0.0, 0.0]])
+  observation = _observation(2.0, 0.49, 2.0)
+
+  output = privileged_safety_teacher(observation, nominal, cfg)
+
+  assert 0.0 < output.speed_scale.item() <= cfg.stop_label_alpha_threshold
+  assert output.stop.item()
+  assert torch.count_nonzero(output.command).item() == 1
 
 
 def test_base_obstacle_collision_cost_aggregates_policy_substeps() -> None:
@@ -442,3 +666,39 @@ def test_trajectory_evaluator_accumulates_safety_metrics() -> None:
   assert summary.min_sensor_clearance_m == pytest.approx(0.7)
   assert summary.max_collision_force_n == pytest.approx(12.0)
   assert summary.collision_impulse_ns == pytest.approx(0.4)
+
+
+def test_trajectory_evaluator_accepts_configured_brake_hold_as_safe_stop() -> None:
+  evaluator = SafeVelocityTrajectoryEvaluator(
+    SafeVelocityTrajectoryEvaluatorCfg(
+      allowed_region_xy=(-1.0, 1.0, -1.0, 1.0),
+      blocked_modes=(
+        SafeVelocityAdapterMode.BRAKE,
+        SafeVelocityAdapterMode.STOP,
+        SafeVelocityAdapterMode.BLOCKED,
+      ),
+    )
+  )
+  evaluator.update(_sample(0.0, SafeVelocityAdapterMode.BRAKE, planar_speed_mps=0.05))
+  evaluator.update(_sample(1.1, SafeVelocityAdapterMode.BRAKE, planar_speed_mps=0.01))
+
+  summary = evaluator.summarize()
+
+  assert summary.outcome == SafeVelocityOutcome.SAFE_BLOCKED_STOP
+  assert summary.safe_blocked_stop
+
+
+@pytest.mark.parametrize(
+  "mode", [SafeVelocityAdapterMode.BRAKE, SafeVelocityAdapterMode.BLOCKED]
+)
+def test_safe_stop_requires_continuous_stationary_hold(mode) -> None:
+  evaluator = SafeVelocityTrajectoryEvaluator(
+    SafeVelocityTrajectoryEvaluatorCfg(
+      allowed_region_xy=(-1.0, 1.0, -1.0, 1.0), blocked_modes=(mode,)
+    )
+  )
+  for time_s, speed in ((0.0, 0.0), (0.6, 0.0), (0.7, 0.2), (0.8, 0.0), (1.4, 0.0)):
+    evaluator.update(_sample(time_s, mode, planar_speed_mps=speed))
+  assert not evaluator.summarize().safe_blocked_stop
+  evaluator.update(_sample(1.9, mode, planar_speed_mps=0.0))
+  assert evaluator.summarize().outcome == SafeVelocityOutcome.SAFE_BLOCKED_STOP

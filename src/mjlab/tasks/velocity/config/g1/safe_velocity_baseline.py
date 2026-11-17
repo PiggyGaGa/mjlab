@@ -56,6 +56,9 @@ class SafeVelocityTrajectoryEvaluatorCfg:
   resume_distance_m: float = 0.1
   blocked_hold_s: float = 1.0
   stationary_speed_mps: float = 0.1
+  blocked_modes: tuple[SafeVelocityAdapterMode, ...] = (
+    SafeVelocityAdapterMode.BLOCKED,
+  )
 
   def __post_init__(self) -> None:
     x_min, x_max, y_min, y_max = self.allowed_region_xy
@@ -71,6 +74,10 @@ class SafeVelocityTrajectoryEvaluatorCfg:
     )
     if any(value <= 0 for value in positive):
       raise ValueError("trajectory evaluator thresholds must be positive")
+    if not self.blocked_modes or len(set(self.blocked_modes)) != len(
+      self.blocked_modes
+    ):
+      raise ValueError("blocked_modes must be non-empty and unique")
 
 
 @dataclass(frozen=True)
@@ -176,14 +183,14 @@ class SafeVelocityTrajectoryEvaluator:
       )
 
     if (
-      sample.mode == SafeVelocityAdapterMode.BLOCKED
+      sample.mode in self.cfg.blocked_modes
       and previous is not None
-      and previous.mode == SafeVelocityAdapterMode.BLOCKED
+      and previous.mode in self.cfg.blocked_modes
       and sample.planar_speed_mps <= self.cfg.stationary_speed_mps
       and previous.planar_speed_mps <= self.cfg.stationary_speed_mps
     ):
       self._blocked_hold_s += dt
-    elif sample.mode != SafeVelocityAdapterMode.BLOCKED:
+    else:
       self._blocked_hold_s = 0.0
 
     if sample.mode in (SafeVelocityAdapterMode.TRACK, SafeVelocityAdapterMode.RESUME):
@@ -264,6 +271,11 @@ class SafeVelocityDepthAdapterCfg:
   search_time_budget_s: float = 6.0
   resume_speed: float = 0.3
   vertical_roi: tuple[float, float] = (0.2, 0.85)
+  stop_only: bool = False
+  clearance_sector_indices: tuple[int, ...] = (1,)
+  horizontal_window_fraction: float | None = None
+  temporal_median_window: int = 1
+  maximum_forward_speed_m_s: float | None = None
   enabled: bool = True
 
   def __post_init__(self) -> None:
@@ -288,6 +300,68 @@ class SafeVelocityDepthAdapterCfg:
       raise ValueError("resume_speed must be non-negative")
     if not 0 <= self.vertical_roi[0] < self.vertical_roi[1] <= 1:
       raise ValueError("vertical_roi must satisfy 0 <= min < max <= 1")
+    if not self.clearance_sector_indices:
+      raise ValueError("clearance_sector_indices must not be empty")
+    if len(set(self.clearance_sector_indices)) != len(self.clearance_sector_indices):
+      raise ValueError("clearance_sector_indices must be unique")
+    if any(index not in (0, 1, 2) for index in self.clearance_sector_indices):
+      raise ValueError("clearance_sector_indices must contain only 0, 1, or 2")
+    if (
+      self.horizontal_window_fraction is not None
+      and not 0 < self.horizontal_window_fraction <= 1
+    ):
+      raise ValueError("horizontal_window_fraction must be in (0, 1]")
+    if self.temporal_median_window < 1 or self.temporal_median_window % 2 == 0:
+      raise ValueError("temporal_median_window must be a positive odd integer")
+    if (
+      self.maximum_forward_speed_m_s is not None and self.maximum_forward_speed_m_s <= 0
+    ):
+      raise ValueError("maximum_forward_speed_m_s must be positive when configured")
+
+
+@dataclass(frozen=True)
+class SafeVelocitySafetyTeacherCfg:
+  """Thresholds for collision-truth supervision of a visual safety student."""
+
+  cutoff_distance_m: float = 5.0
+  stop_distance_m: float = 0.4
+  slow_distance_m: float = 1.4
+  stop_label_alpha_threshold: float = 0.1
+
+  def __post_init__(self) -> None:
+    if self.cutoff_distance_m <= 0:
+      raise ValueError("cutoff_distance_m must be positive")
+    if not 0 < self.stop_distance_m < self.slow_distance_m:
+      raise ValueError("teacher distances must satisfy 0 < stop < slow")
+    if self.slow_distance_m > self.cutoff_distance_m:
+      raise ValueError("slow_distance_m must not exceed cutoff_distance_m")
+    if not 0.0 <= self.stop_label_alpha_threshold < 1.0:
+      raise ValueError("stop_label_alpha_threshold must be in [0, 1)")
+
+
+@dataclass(frozen=True)
+class SafeVelocitySafetyTeacherOutput:
+  """Continuous oracle command and labels for privileged-to-vision transfer."""
+
+  command: torch.Tensor
+  front_clearance_m: torch.Tensor
+  front_valid: torch.Tensor
+  speed_scale: torch.Tensor
+  stop: torch.Tensor
+
+  def labels(self, cutoff_distance_m: float) -> torch.Tensor:
+    """Return normalized clearance, validity, scale, and stop supervision."""
+    if cutoff_distance_m <= 0:
+      raise ValueError("cutoff_distance_m must be positive")
+    return torch.stack(
+      (
+        self.front_clearance_m / cutoff_distance_m,
+        self.front_valid.to(self.command.dtype),
+        self.speed_scale,
+        self.stop.to(self.command.dtype),
+      ),
+      dim=1,
+    )
 
 
 @dataclass(frozen=True)
@@ -326,6 +400,16 @@ class SafeVelocityDepthAdapter:
     self.search_elapsed_s = torch.zeros(num_envs, device=device)
     self.search_direction = torch.ones(num_envs, device=device)
     self.intervention_count = torch.zeros(num_envs, dtype=torch.long, device=device)
+    self._clearance_history = torch.zeros(
+      (num_envs, self.cfg.temporal_median_window), device=device
+    )
+    self._valid_ratio_history = torch.zeros_like(self._clearance_history)
+    self._history_initialized = torch.zeros(num_envs, dtype=torch.bool, device=device)
+    self.decision_clearance_m = torch.full(
+      (num_envs,), self.cfg.cutoff_distance_m, device=device
+    )
+    self.decision_valid_ratio = torch.zeros(num_envs, device=device)
+    self.speed_scale = torch.ones(num_envs, device=device)
 
   def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
     """Reset all or selected adapter states."""
@@ -334,6 +418,10 @@ class SafeVelocityDepthAdapter:
     self.search_elapsed_s[ids] = 0.0
     self.search_direction[ids] = 1.0
     self.intervention_count[ids] = 0
+    self._history_initialized[ids] = False
+    self.decision_clearance_m[ids] = self.cfg.cutoff_distance_m
+    self.decision_valid_ratio[ids] = 0.0
+    self.speed_scale[ids] = 1.0
 
   def step(
     self,
@@ -358,6 +446,43 @@ class SafeVelocityDepthAdapter:
     timed_out = torch.zeros_like(self.mode, dtype=torch.bool)
     if not self.cfg.enabled:
       intervention = torch.zeros_like(self.mode, dtype=torch.bool)
+      return SafeVelocityDepthAdapterOutput(
+        command=command,
+        mode=self.mode.clone(),
+        sector_clearance_m=clearance,
+        sector_valid_ratio=valid_ratio,
+        intervention=intervention,
+        search_timed_out=timed_out,
+        search_elapsed_s=self.search_elapsed_s.clone(),
+      )
+
+    if self.cfg.stop_only:
+      front_clearance, front_valid_ratio = self._selected_statistics(frame)
+      front_clearance, front_valid_ratio = self._temporal_statistics(
+        front_clearance, front_valid_ratio
+      )
+      front_valid = front_valid_ratio >= self.cfg.minimum_valid_ratio
+      speed_scale = (
+        (front_clearance - self.cfg.stop_clearance_m)
+        / (self.cfg.collision_risk_distance_m - self.cfg.stop_clearance_m)
+      ).clamp(0.0, 1.0)
+      speed_scale = torch.where(front_valid, speed_scale, 0.0)
+      self.decision_clearance_m.copy_(front_clearance)
+      self.decision_valid_ratio.copy_(front_valid_ratio)
+      self.speed_scale.copy_(speed_scale)
+      command *= speed_scale.unsqueeze(1)
+      if self.cfg.maximum_forward_speed_m_s is not None:
+        forward_limit = self.cfg.maximum_forward_speed_m_s * speed_scale
+        command[:, 0] = torch.maximum(
+          torch.minimum(command[:, 0], forward_limit),
+          -forward_limit,
+        )
+      self.mode.fill_(int(SafeVelocityAdapterMode.BRAKE))
+      self.mode[speed_scale >= 1.0] = int(SafeVelocityAdapterMode.TRACK)
+      self.mode[speed_scale <= 0.0] = int(SafeVelocityAdapterMode.STOP)
+      self.search_elapsed_s.zero_()
+      intervention = ~torch.isclose(command, nominal_command).all(dim=-1)
+      self.intervention_count += intervention.long()
       return SafeVelocityDepthAdapterOutput(
         command=command,
         mode=self.mode.clone(),
@@ -473,6 +598,86 @@ class SafeVelocityDepthAdapter:
       clearances.append(sector_clearance)
       valid_ratios.append(sector_valid.float().mean(dim=(-2, -1)))
     return torch.stack(clearances, dim=1), torch.stack(valid_ratios, dim=1)
+
+  def _selected_statistics(
+    self, observation: torch.Tensor
+  ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Aggregate selected sectors before computing one robust clearance."""
+    depth = observation[:, 0] * self.cfg.cutoff_distance_m
+    validity = observation[:, 1] > 0.5
+    height, width = depth.shape[-2:]
+    row_start = int(height * self.cfg.vertical_roi[0])
+    row_end = max(row_start + 1, int(height * self.cfg.vertical_roi[1]))
+    column_edges = (0, width // 3, 2 * width // 3, width)
+    depth_parts = [
+      depth[:, row_start:row_end, column_edges[index] : column_edges[index + 1]]
+      for index in self.cfg.clearance_sector_indices
+    ]
+    validity_parts = [
+      validity[:, row_start:row_end, column_edges[index] : column_edges[index + 1]]
+      for index in self.cfg.clearance_sector_indices
+    ]
+    selected_depth = torch.cat(depth_parts, dim=2)
+    selected_validity = torch.cat(validity_parts, dim=2)
+    valid_ratio = selected_validity.float().mean(dim=(-2, -1))
+    if self.cfg.horizontal_window_fraction is None:
+      masked = torch.where(
+        selected_validity,
+        selected_depth,
+        torch.full_like(selected_depth, torch.nan),
+      )
+      clearance = torch.nanquantile(
+        masked.flatten(1), self.cfg.clearance_quantile, dim=1
+      ).nan_to_num(0.0)
+      return clearance, valid_ratio
+
+    selected_width = selected_depth.shape[2]
+    window_width = max(1, round(selected_width * self.cfg.horizontal_window_fraction))
+    stride = max(1, window_width // 2)
+    starts = list(range(0, selected_width - window_width + 1, stride))
+    final_start = selected_width - window_width
+    if starts[-1] != final_start:
+      starts.append(final_start)
+    window_clearances: list[torch.Tensor] = []
+    for start in starts:
+      window_depth = selected_depth[:, :, start : start + window_width]
+      window_validity = selected_validity[:, :, start : start + window_width]
+      masked = torch.where(
+        window_validity,
+        window_depth,
+        torch.full_like(window_depth, torch.nan),
+      )
+      window_clearances.append(
+        torch.nanquantile(
+          masked.flatten(1), self.cfg.clearance_quantile, dim=1
+        ).nan_to_num(0.0)
+      )
+    return torch.stack(window_clearances, dim=1).amin(dim=1), valid_ratio
+
+  def _temporal_statistics(
+    self,
+    clearance: torch.Tensor,
+    valid_ratio: torch.Tensor,
+  ) -> tuple[torch.Tensor, torch.Tensor]:
+    uninitialized = ~self._history_initialized
+    if torch.any(uninitialized):
+      self._clearance_history[uninitialized] = clearance[uninitialized, None]
+      self._valid_ratio_history[uninitialized] = valid_ratio[uninitialized, None]
+    initialized = self._history_initialized
+    if torch.any(initialized):
+      self._clearance_history[initialized] = torch.roll(
+        self._clearance_history[initialized], shifts=-1, dims=1
+      )
+      self._valid_ratio_history[initialized] = torch.roll(
+        self._valid_ratio_history[initialized], shifts=-1, dims=1
+      )
+      self._clearance_history[initialized, -1] = clearance[initialized]
+      self._valid_ratio_history[initialized, -1] = valid_ratio[initialized]
+    self._history_initialized.fill_(True)
+    return (
+      self._clearance_history.median(dim=1).values,
+      self._valid_ratio_history.median(dim=1).values,
+    )
 
 
 def _camera_depth_validity(
@@ -681,6 +886,62 @@ def local_geometry_stop_command(
   return command, stop
 
 
+def privileged_safety_teacher(
+  depth_validity: torch.Tensor,
+  nominal_command: torch.Tensor,
+  cfg: SafeVelocitySafetyTeacherCfg,
+) -> SafeVelocitySafetyTeacherOutput:
+  """Generate conservative continuous labels from collision-truth front rays."""
+  if depth_validity.ndim == 5:
+    depth_validity = depth_validity[:, -1]
+  batch = nominal_command.shape[0]
+  if depth_validity.ndim != 4 or depth_validity.shape[:2] != (batch, 2):
+    raise ValueError("depth_validity must have shape (B, 2, H, W)")
+  if nominal_command.shape != (batch, 3):
+    raise ValueError("nominal_command must have shape (B, 3)")
+
+  depth_m = depth_validity[:, 0] * cfg.cutoff_distance_m
+  valid = depth_validity[:, 1] > 0.5
+  width = depth_m.shape[-1]
+  front_start = width // 3
+  front_end = 2 * width // 3
+  front_depth = depth_m[..., front_start:front_end]
+  front_valid_pixels = valid[..., front_start:front_end]
+  front_valid = front_valid_pixels.flatten(1).all(dim=1)
+  front_clearance_m = (
+    torch.where(
+      front_valid_pixels,
+      front_depth,
+      torch.full_like(front_depth, torch.inf),
+    )
+    .flatten(1)
+    .amin(dim=1)
+  )
+  # Unknown geometry is a conservative stop label with zero reported clearance.
+  front_clearance_m = torch.where(
+    front_valid,
+    front_clearance_m,
+    torch.zeros_like(front_clearance_m),
+  )
+  speed_scale = (
+    (front_clearance_m - cfg.stop_distance_m)
+    / (cfg.slow_distance_m - cfg.stop_distance_m)
+  ).clamp(0.0, 1.0)
+  speed_scale = torch.where(front_valid, speed_scale, torch.zeros_like(speed_scale))
+  command = nominal_command * speed_scale[:, None]
+  # The physical base contacts this scene before a pelvis ray can reach the
+  # 0.4 m command-zero distance. Label the empirically non-walkable tail as stop
+  # while preserving the continuous command and its calibrated distance curve.
+  stop = (~front_valid) | (speed_scale <= cfg.stop_label_alpha_threshold)
+  return SafeVelocitySafetyTeacherOutput(
+    command=command,
+    front_clearance_m=front_clearance_m,
+    front_valid=front_valid,
+    speed_scale=speed_scale,
+    stop=stop,
+  )
+
+
 class SafeVelocityLocalGeometryTrackingReward:
   """Track a stateless stop-on-obstacle command from privileged geometry."""
 
@@ -730,6 +991,207 @@ class SafeVelocityLocalGeometryTrackingReward:
     )
 
 
+class SafeVelocitySafetyTeacherTrackingReward:
+  """Track the same continuous safe command exported as teacher supervision."""
+
+  def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv) -> None:
+    del env
+    teacher_cfg = cfg.params.get("teacher_cfg")
+    if not isinstance(teacher_cfg, SafeVelocitySafetyTeacherCfg):
+      raise TypeError("teacher_cfg must be SafeVelocitySafetyTeacherCfg")
+    self.cfg = teacher_cfg
+    self.last_output: SafeVelocitySafetyTeacherOutput | None = None
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    del env_ids
+    self.last_output = None
+
+  def __call__(
+    self,
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    sensor_names: tuple[str, ...],
+    teacher_cfg: SafeVelocitySafetyTeacherCfg,
+    linear_std: float,
+    angular_std: float,
+  ) -> torch.Tensor:
+    del teacher_cfg
+    nominal = env.command_manager.get_command(command_name)
+    if nominal is None:
+      raise ValueError(f"Velocity command '{command_name}' is not configured")
+    observation = _local_geometry_adapter_input(
+      env,
+      sensor_names=sensor_names,
+      cutoff_distance_m=self.cfg.cutoff_distance_m,
+    )
+    self.last_output = privileged_safety_teacher(observation, nominal, self.cfg)
+    robot: Entity = env.scene["robot"]
+    return safe_velocity_twist_tracking_reward(
+      robot.data.root_link_lin_vel_b,
+      robot.data.root_link_ang_vel_b,
+      self.last_output.command,
+      linear_std,
+      angular_std,
+    )
+
+
+class SafeVelocityPrivilegedStopCommand:
+  """Gate a nominal command with privileged front-clearance measurements."""
+
+  def __init__(self, cfg: ObservationTermCfg, env: ManagerBasedRlEnv) -> None:
+    adapter_cfg = cfg.params.get("adapter_cfg")
+    if not isinstance(adapter_cfg, SafeVelocityDepthAdapterCfg):
+      raise TypeError("adapter_cfg must be SafeVelocityDepthAdapterCfg")
+    self.cfg = adapter_cfg
+    self.last_command: torch.Tensor | None = None
+    self.last_stop: torch.Tensor | None = None
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    del env_ids
+    self.last_command = None
+    self.last_stop = None
+
+  def __call__(
+    self,
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    sensor_names: tuple[str, ...],
+    adapter_cfg: SafeVelocityDepthAdapterCfg,
+  ) -> torch.Tensor:
+    del adapter_cfg
+    nominal = env.command_manager.get_command(command_name)
+    if nominal is None:
+      raise ValueError(f"Velocity command '{command_name}' is not configured")
+    observation = _local_geometry_adapter_input(
+      env,
+      sensor_names=sensor_names,
+      cutoff_distance_m=self.cfg.cutoff_distance_m,
+    )
+    self.last_command, self.last_stop = local_geometry_stop_command(
+      observation,
+      nominal,
+      self.cfg,
+    )
+    return self.last_command
+
+
+class SafeVelocityPrivilegedSafetyCommand:
+  """Expose a continuous collision-truth command to a frozen locomotion actor."""
+
+  def __init__(self, cfg: ObservationTermCfg, env: ManagerBasedRlEnv) -> None:
+    teacher_cfg = cfg.params.get("teacher_cfg")
+    if not isinstance(teacher_cfg, SafeVelocitySafetyTeacherCfg):
+      raise TypeError("teacher_cfg must be SafeVelocitySafetyTeacherCfg")
+    self.cfg = teacher_cfg
+    self._debug_print = bool(cfg.params.get("debug_print", False))
+    self._debug_print_interval_steps = max(1, round(1.0 / env.step_dt))
+    self._last_debug_print_step = -self._debug_print_interval_steps
+    self.last_output: SafeVelocitySafetyTeacherOutput | None = None
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    del env_ids
+    self.last_output = None
+
+  def __call__(
+    self,
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    sensor_names: tuple[str, ...],
+    teacher_cfg: SafeVelocitySafetyTeacherCfg,
+    debug_print: bool = False,
+  ) -> torch.Tensor:
+    del teacher_cfg, debug_print
+    nominal = env.command_manager.get_command(command_name)
+    if nominal is None:
+      raise ValueError(f"Velocity command '{command_name}' is not configured")
+    observation = _local_geometry_adapter_input(
+      env,
+      sensor_names=sensor_names,
+      cutoff_distance_m=self.cfg.cutoff_distance_m,
+    )
+    self.last_output = privileged_safety_teacher(observation, nominal, self.cfg)
+    self._print_debug_diagnostics(env, nominal)
+    return self.last_output.command
+
+  def _print_debug_diagnostics(
+    self,
+    env: ManagerBasedRlEnv,
+    nominal: torch.Tensor,
+  ) -> None:
+    if not self._debug_print or env.common_step_counter == 0:
+      return
+    active_terminations = tuple(
+      name
+      for name in env.termination_manager.active_terms
+      if env.termination_manager.get_term(name)[0].item()
+    )
+    if (
+      not active_terminations
+      and env.common_step_counter - self._last_debug_print_step
+      < self._debug_print_interval_steps
+    ):
+      return
+    assert self.last_output is not None
+    output = self.last_output
+    robot = env.scene["robot"]
+    if not isinstance(robot, Entity):
+      raise TypeError("Safe-velocity diagnostics require the robot entity")
+    nominal_0 = nominal[0].detach().cpu().tolist()
+    safe_0 = output.command[0].detach().cpu().tolist()
+    measured_lin_0 = robot.data.root_link_lin_vel_b[0].detach().cpu().tolist()
+    measured_wz_0 = robot.data.root_link_ang_vel_b[0, 2].item()
+    episode_step_0 = env.episode_length_buf[0].item()
+    termination_0 = ",".join(active_terminations) or "none"
+    clearance_0 = output.front_clearance_m[0].item()
+    alpha_0 = output.speed_scale[0].item()
+    stop_0 = output.stop[0].item()
+    print(
+      "[safe_velocity] env=0 "
+      f"nominal=({nominal_0[0]:.3f}, {nominal_0[1]:.3f}, {nominal_0[2]:.3f}) "
+      f"safe=({safe_0[0]:.3f}, {safe_0[1]:.3f}, {safe_0[2]:.3f}) "
+      f"measured=({measured_lin_0[0]:.3f}, {measured_lin_0[1]:.3f}, "
+      f"{measured_wz_0:.3f}) "
+      f"clearance={clearance_0:.3f}m alpha={alpha_0:.3f} stop={stop_0} "
+      f"episode_step={episode_step_0} termination={termination_0}"
+    )
+    self._last_debug_print_step = env.common_step_counter
+
+
+class SafeVelocityPrivilegedSafetyLabels:
+  """Expose deployable student targets without adding them to actor observations."""
+
+  def __init__(self, cfg: ObservationTermCfg, env: ManagerBasedRlEnv) -> None:
+    del env
+    teacher_cfg = cfg.params.get("teacher_cfg")
+    if not isinstance(teacher_cfg, SafeVelocitySafetyTeacherCfg):
+      raise TypeError("teacher_cfg must be SafeVelocitySafetyTeacherCfg")
+    self.cfg = teacher_cfg
+    self.last_output: SafeVelocitySafetyTeacherOutput | None = None
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    del env_ids
+    self.last_output = None
+
+  def __call__(
+    self,
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    sensor_names: tuple[str, ...],
+    teacher_cfg: SafeVelocitySafetyTeacherCfg,
+  ) -> torch.Tensor:
+    del teacher_cfg
+    nominal = env.command_manager.get_command(command_name)
+    if nominal is None:
+      raise ValueError(f"Velocity command '{command_name}' is not configured")
+    observation = _local_geometry_adapter_input(
+      env,
+      sensor_names=sensor_names,
+      cutoff_distance_m=self.cfg.cutoff_distance_m,
+    )
+    self.last_output = privileged_safety_teacher(observation, nominal, self.cfg)
+    return self.last_output.labels(self.cfg.cutoff_distance_m)
+
+
 class adapted_velocity_command:
   """Observation term that exposes an adapter command to a blind policy.
 
@@ -747,6 +1209,9 @@ class adapted_velocity_command:
       device=env.device,
       cfg=adapter_cfg,
     )
+    self._debug_print = bool(cfg.params.get("debug_print", False))
+    self._debug_print_interval_steps = max(1, round(1.0 / env.step_dt))
+    self._last_debug_print_step = -self._debug_print_interval_steps
     self.last_output: SafeVelocityDepthAdapterOutput | None = None
 
   def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
@@ -759,8 +1224,9 @@ class adapted_velocity_command:
     command_name: str,
     sensor_name: str,
     adapter_cfg: SafeVelocityDepthAdapterCfg,
+    debug_print: bool = False,
   ) -> torch.Tensor:
-    del adapter_cfg
+    del adapter_cfg, debug_print
     sensor = env.scene[sensor_name]
     if not isinstance(sensor, CameraSensor):
       raise TypeError(
@@ -775,7 +1241,51 @@ class adapted_velocity_command:
     if nominal is None:
       raise ValueError(f"Velocity command '{command_name}' is not configured")
     self.last_output = self.adapter.step(observation, nominal, env.step_dt)
+    self._print_debug_diagnostics(env, nominal)
     return self.last_output.command
+
+  def _print_debug_diagnostics(
+    self,
+    env: ManagerBasedRlEnv,
+    nominal: torch.Tensor,
+  ) -> None:
+    if not self._debug_print or env.common_step_counter == 0:
+      return
+    active_terminations = tuple(
+      name
+      for name in env.termination_manager.active_terms
+      if env.termination_manager.get_term(name)[0].item()
+    )
+    if (
+      not active_terminations
+      and env.common_step_counter - self._last_debug_print_step
+      < self._debug_print_interval_steps
+    ):
+      return
+    assert self.last_output is not None
+    clearance = self.adapter.decision_clearance_m
+    alpha = self.adapter.speed_scale
+    robot = env.scene["robot"]
+    if not isinstance(robot, Entity):
+      raise TypeError("Safe-velocity diagnostics require the robot entity")
+    nominal_0 = nominal[0].detach().cpu().tolist()
+    safe_0 = self.last_output.command[0].detach().cpu().tolist()
+    measured_lin_0 = robot.data.root_link_lin_vel_b[0].detach().cpu().tolist()
+    measured_wz_0 = robot.data.root_link_ang_vel_b[0, 2].item()
+    episode_step_0 = env.episode_length_buf[0].item()
+    termination_0 = ",".join(active_terminations) or "none"
+    print(
+      "[safe_velocity_depth] env=0 "
+      f"nominal=({nominal_0[0]:.3f}, {nominal_0[1]:.3f}, "
+      f"{nominal_0[2]:.3f}) "
+      f"safe=({safe_0[0]:.3f}, {safe_0[1]:.3f}, {safe_0[2]:.3f}) "
+      f"measured=({measured_lin_0[0]:.3f}, {measured_lin_0[1]:.3f}, "
+      f"{measured_wz_0:.3f}) clearance={clearance[0].item():.3f}m "
+      f"alpha={alpha[0].item():.3f} "
+      f"stop={self.last_output.mode[0].item() == SafeVelocityAdapterMode.STOP} "
+      f"episode_step={episode_step_0} termination={termination_0}"
+    )
+    self._last_debug_print_step = env.common_step_counter
 
 
 def classify_safe_velocity_outcome(
@@ -815,6 +1325,12 @@ __all__ = [
   "SafeVelocityDepthAdapter",
   "SafeVelocityOutcome",
   "SafeVelocityLocalGeometryTrackingReward",
+  "SafeVelocityPrivilegedSafetyCommand",
+  "SafeVelocityPrivilegedSafetyLabels",
+  "SafeVelocityPrivilegedStopCommand",
+  "SafeVelocitySafetyTeacherTrackingReward",
+  "SafeVelocitySafetyTeacherCfg",
+  "SafeVelocitySafetyTeacherOutput",
   "SafeVelocityTrackingReward",
   "SafeVelocityTrajectoryEvaluator",
   "SafeVelocityTrajectoryEvaluatorCfg",
@@ -824,6 +1340,7 @@ __all__ = [
   "classify_safe_velocity_outcome",
   "local_geometry_stop_command",
   "local_geometry_depth_validity_from_ray_distances",
+  "privileged_safety_teacher",
   "safe_velocity_base_obstacle_collision_cost",
   "safe_velocity_local_geometry",
   "safe_velocity_twist_tracking_reward",

@@ -8,6 +8,21 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added structured pelvis contact events, termination reasons, and camera-source
+  checks to safe-velocity acceptance reports. Current contact flags remain active
+  even when force history is zero, and terminated depth-stop runs cannot pass.
+
+- Added six ``ArtanimMotionCaptureStudio`` safe-velocity qualification spawn
+  points at one shared origin and six generalization spawn points at distinct
+  positions, with each orientation aimed at a different collision pillar. The
+  original ``default`` spawn remains unchanged.
+- Added manifest spawn-prefix batching to the safe-velocity acceptance runner.
+  Multi-spawn matrices now report collision, fall, termination, clearance, path,
+  and duration aggregates while preserving the existing single-spawn CLI.
+- Added a safe-velocity scene-alignment runner that renders identical camera poses
+  with Gaussian-only and collision-only depth, records quantitative depth agreement,
+  and writes color-coded review overlays without changing renderer defaults.
+
 - Added an isolated ``Mjlab-Velocity-Safe-Unitree-G1-3DGS`` task skeleton and a
   versioned apartment scenario catalog for P7. The task reuses the existing G1
   joint action, body-frame velocity command, and robust temporal depth+validity
@@ -46,6 +61,77 @@ Added
   noise and lower-intensity PPO updates to avoid destroying the pretrained gait.
   Privileged collision-ray misses are treated as known free space up to the ray
   cutoff, rather than as invalid camera-depth samples.
+  A separate privileged stop-gate task now preserves the locomotion warm-start and
+  uses local collision geometry only to replace the actor's nominal command with
+  zero near a front obstacle. Safe-velocity tasks also terminate on a pelvis below
+  0.5 m or non-foot ground contact so collapsed stationary postures cannot satisfy
+  the stopping objective. A separate continuous privileged safety-teacher task now
+  supplies normalized clearance, geometry validity, speed scale, and stop labels in
+  a non-actor observation group while smoothly scaling the command passed to the
+  frozen locomotion actor. Its play configuration prints rate-limited nominal,
+  safe, and measured velocities together with front clearance, speed scale, and
+  stop state for calibration. It also reports episode step and the exact termination
+  reason immediately on an automatic reset, and uses the selected scenario's fixed
+  nominal command instead of random training samples. Existing hard-gate and failed
+  end-to-end experiment paths remain available as reproducible baselines.
+  A separate safe-velocity vision-data task now pairs the existing robust temporal
+  3DGS depth-validity observation with collision-truth safety labels while keeping
+  both groups outside the frozen locomotion actor and critic inputs. A chunked data
+  collector runs a frozen locomotion checkpoint and writes float16 camera histories,
+  teacher labels, commands, measured velocity, reset masks, ordered termination
+  flags, and a hashed manifest without updating the policy. Collection keeps the
+  locomotion actor on deterministic play observations while independently enabling
+  camera corruption, and clones buffered tensors so CPU and GPU chunks have the
+  same temporal semantics. Startup dynamics randomization is disabled for the
+  nominal offline dataset and remains available through an explicit collector
+  flag; chunks include environment indices and base height for rollout auditing.
+  Reconstructed safe-velocity environments keep ``env_spacing=0`` because MuJoCo
+  Warp already isolates vectorized environments as separate worlds sharing the
+  same collision model and splat group. This keeps each world's robot, collision,
+  camera, and raycast data in the same scene-local frame and enables parallel
+  collection without duplicating splat memory.
+  Teacher-command rollouts collect stable braking trajectories, while an explicit
+  nominal-command rollout mode collects near-obstacle positive labels without
+  changing their collision-truth targets. Chunks record both the safe target and
+  actually executed command, and manifests identify the rollout mode.
+  The binary stop target now marks the empirically non-walkable ``alpha <= 0.1``
+  tail while leaving the continuous command's calibrated 0.4 m zero point intact.
+  An optional positive-label target ends nominal collection before the next policy
+  action once enough stop samples have been captured, avoiding scenario-specific
+  hard-coded collision timing.
+  A task-local offline visual student now encodes seven-frame depth-validity
+  histories together with the nominal command and predicts normalized clearance,
+  validity, speed scale, and stop probability. Its loader enforces catalog train,
+  validation, and test splits, while its weighted loss penalizes unsafe speed-scale
+  overestimation and rare missed-stop labels. A standalone trainer selects
+  checkpoints only by validation loss and evaluates the held-out test split once
+  after training, without modifying RSL-RL or the frozen locomotion actor. The
+  encoder reuses mjlab's spatial-softmax layer so left, centre, and right geometry
+  remain distinguishable, and derives stop probability continuously from the
+  predicted speed scale instead of training an inconsistent independent head.
+  A separate ``Safe-Depth-Stop`` task now applies a shape-independent robust depth
+  quantile to the complete forward image region. It continuously scales the nominal
+  command between 0.4 m and 1.4 m clearance, stops conservatively for invalid depth,
+  and never introduces search or steering. Its optional absolute forward-speed cap
+  prevents large nominal commands from amplifying the validated braking curve. An
+  optional overlapping local-window quantile detects narrow obstacles that occupy
+  too little of the complete image for a global quantile, while a scalar temporal
+  median rejects transient depth failures without buffering additional images. The
+  existing adapter and visual-student experiment paths remain unchanged for
+  reproducible comparison. The structured adapter evaluator can also run this
+  stop-only controller and treats a sustained stationary brake state as a successful
+  safe stop without changing the original search-controller outcome semantics.
+  Its configuration factory can now select a scene manifest and spawn before the
+  environment is built, deriving base-link obstacle contacts from that manifest's
+  collision MJCF while preserving the apartment scenario as the default.
+  A dedicated map playback tool registers this prebuilt configuration as a
+  process-local task before entering the standard play and viewer path, so
+  manifest-dependent contact sensors are created before the environment instead of
+  becoming stale after a post-configuration scene override. The shared play API is
+  unchanged.
+  The structured depth-stop evaluator accepts the same custom-map inputs together
+  with explicit bounds and expected outcomes, recording trace-level stopping,
+  collision, fall, and termination evidence without reusing apartment assumptions.
 
 - Added an apartment scene collision approximation generated from Gaussian
   centres, with a ground slab, voxel surface boxes, and a rebuild script. Two
@@ -203,6 +289,17 @@ Changed
 
 Fixed
 ^^^^^
+
+- Safe-velocity stopping acceptance now requires one continuous stationary hold;
+  movement within a braking mode resets the timer instead of accumulating several
+  short stops. Reports independently audit the final stationary interval.
+
+- Isolated safe-velocity vision-data teacher rays from camera render groups using
+  task-local direct collision queries. Hidden collision proxies no longer enter
+  new camera inputs through the shared render BVH. Collection manifests record
+  visual provenance, and an explicit legacy option preserves old experiments.
+  Offline alignment now defaults to hidden group-3 proxies; added visible mesh
+  obstacles do not need counterparts in the Gaussian reconstruction.
 
 - Increased G1 3DGS play contact capacity from 35 to at least 256 per world for
   external collision scenes, preserving larger allocations and training defaults.

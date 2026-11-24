@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
+
+from mjlab.scene.gaussian_splat_cache import ARRAY_NAMES, load_cached_splat_arrays
 
 _SH_C0 = 0.28209479177387814
 
@@ -66,6 +68,9 @@ class GaussianSplatAssetCfg:
 
   color_encoding: Literal["sh_dc", "rgb"] = "sh_dc"
   """Color fields: ``f_dc_0..2`` or ``red/green/blue``."""
+
+  cache_dir: str | None = None
+  """Optional directory for versioned normalized-array NPZ caches; off by default."""
 
   def __post_init__(self) -> None:
     if self.scale <= 0.0 or not np.isfinite(self.scale):
@@ -298,6 +303,25 @@ def _quat_to_matrix(quat: np.ndarray) -> np.ndarray:
 
 def load_gaussian_splat_asset(cfg: GaussianSplatAssetCfg) -> GaussianSplatData:
   """Load and normalize one 3DGS asset as a single splat group."""
+  if cfg.cache_dir is None:
+    return _load_gaussian_splat_asset_uncached(cfg)
+  source = Path(cfg.path).expanduser().resolve()
+  pinned_cfg = replace(cfg, path=str(source))
+
+  def build() -> dict[str, np.ndarray]:
+    data = _load_gaussian_splat_asset_uncached(pinned_cfg)
+    return {name: getattr(data, name) for name in ARRAY_NAMES}
+
+  parameters = {
+    key: value for key, value in asdict(cfg).items() if key not in {"path", "cache_dir"}
+  }
+  arrays = load_cached_splat_arrays(source, Path(cfg.cache_dir), parameters, build)
+  return GaussianSplatData(**arrays)
+
+
+def _load_gaussian_splat_asset_uncached(
+  cfg: GaussianSplatAssetCfg,
+) -> GaussianSplatData:
   path = Path(cfg.path).expanduser()
   fields = _read_ply_vertices(path)
 

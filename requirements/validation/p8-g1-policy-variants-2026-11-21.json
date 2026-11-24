@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "variants": [
+    {
+      "name": "plane_control",
+      "collision_mjcf": null,
+      "geometry": {
+        "role": "task default flat-plane control"
+      }
+    },
+    {
+      "name": "internal_43_primitives",
+      "collision_mjcf": "/tmp/p8-representations-final/primitives.xml",
+      "geometry": {
+        "geom_count": 43,
+        "surface_distance_mean": 0.05939175882051509,
+        "surface_distance_p95": 0.13668804888047945,
+        "surface_distance_max": 0.18088355633572337
+      }
+    },
+    {
+      "name": "internal_heightfield_mixed",
+      "collision_mjcf": "/tmp/p8-representations-final/heightfield_mixed.xml",
+      "geometry": {
+        "geom_count": 25,
+        "heightfield_ambiguous_columns": 205,
+        "residual_primitive_count": 24
+      }
+    },
+    {
+      "name": "splattransform_component_hulls",
+      "collision_mjcf": "/tmp/p8-splat-transform/mujoco-convex/collision.xml",
+      "geometry": {
+        "geom_count": 12,
+        "source_surface_distance_mean": 0.07637413448498437,
+        "source_surface_distance_p95": 0.2570231034153255,
+        "source_surface_distance_max": 0.3815771419160333,
+        "hull_to_source_volume_ratio": 1.4421469180007693,
+        "false_occupied_spawn_probes": 0,
+        "spawn_probe_count": 21
+      }
+    },
+    {
+      "name": "splattransform_vhacd_64",
+      "collision_mjcf": "/tmp/p8-splat-transform/mujoco-vhacd/collision.xml",
+      "geometry": {
+        "geom_count": 64,
+        "source_surface_distance_mean": 0.02874318883791862,
+        "source_surface_distance_p95": 0.0885083708074505,
+        "source_surface_distance_max": 0.17274352734814444,
+        "hull_to_source_volume_ratio": 1.1718659305786638,
+        "false_occupied_spawn_probes": 0,
+        "spawn_probe_count": 21
+      }
+    }
+  ]
+}

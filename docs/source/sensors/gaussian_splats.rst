@@ -256,9 +256,57 @@ camera observations are not needed.
 
 The current importer reads the source PLY once during environment initialization;
 simulation and rendering then use the in-memory/GPU representation. Very large
-assets should be filtered with bounds, opacity, or ``max_splats``. A versioned
-preprocessing cache is an optional future startup-time optimization, while automatic
-collision-proxy generation is planned separately.
+assets should be filtered with bounds, opacity, or ``max_splats``. Optional
+versioned preprocessing caches reduce repeated CPU preprocessing; they do not
+cache the GPU render context or BVH and do not improve per-frame rendering by
+themselves.
+
+Optional preprocessing cache
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Set ``GaussianSplatAssetCfg.cache_dir`` explicitly to enable caching:
+
+.. code-block:: python
+
+    asset = GaussianSplatAssetCfg(
+        path="/path/to/splats.ply",
+        cache_dir="artifacts/splat-cache",
+    )
+
+The default ``None`` follows the original loader without source hashing or cache
+I/O. No play/demo or manifest-schema changes are needed; configure the asset in
+the scene/task configuration. Manifest loading still leaves caching off unless
+you explicitly replace/configure the resulting asset configuration.
+
+Each single-asset cache is an uncompressed ``v<schema>-<key>.splats.npz`` file
+containing normalized positions, quaternion rotations, scales, RGBA and single-
+asset group arrays. Its key includes the resolved source path, full source SHA-256,
+schema/normalization version and all import/filter/transform parameters. World
+assignment is rebuilt separately and is not frozen in the asset cache. Source
+content changes invalidate the key even when file size and mtime are unchanged.
+The source PLY must still exist and is hashed on each cached load.
+
+Cache reads disable pickle and verify names, shapes, dtypes, finite values, scale/
+color/quaternion validity, group offsets and array checksums. Invalid entries warn
+and rebuild from PLY. Writes use a unique temporary file in the destination
+directory, flush/fsync, then atomic replacement. Write failures warn and return the
+normal uncached result. Concurrent writers may duplicate preprocessing but never
+publish partial entries. A source that changes during preprocessing is retried once
+and then rejected rather than cached inconsistently. Obsolete content/config keys
+are not deleted automatically.
+
+Measure uncached, first-build and verified cache-hit CPU loading independently:
+
+.. code-block:: bash
+
+    uv run scripts/tools/benchmark_gaussian_splat_loading.py \
+        /path/to/splats.ply artifacts/splat-load-report.json \
+        --cache-dir artifacts/splat-cache --repeats 3
+
+This tool retains a fresh cache subdirectory and checks exact array equality across
+all phases. Timings exclude Python startup and do not measure GPU allocation, BVH,
+Native Viewer FPS or training throughput. Cache creation may be slower than a
+normal first load; OS file caching affects repeated measurements.
 
 
 External collision scene
@@ -269,6 +317,265 @@ scene. They must already use the same right-handed, Z-up coordinate frame, meter
 units, and origin. The collision entry point can contain static primitive geoms,
 multiple convex mesh assets, and heightfields. It must not contain joints, mocap
 bodies, actuators, or sensors.
+
+For a reproducible center-only baseline, voxelize a Graphdeco PLY and merge the
+occupied cells into axis-aligned boxes:
+
+.. code-block:: bash
+
+    uv run scripts/tools/generate_3dgs_collision.py \
+        /path/to/splats.ply /path/to/collision.xml \
+        --report /path/to/collision_report.json \
+        --floor-z 0 \
+        --primitive-mode auto
+
+The report records the input and output hashes, all filtering and merging
+parameters, bounds, and generation statistics. A deterministic ``.source_ids.npz``
+sidecar uses CSR offsets to map every retained primitive to zero-based source PLY
+vertex IDs. ``--floor-z`` is opt-in because a Gaussian cloud alone does not prove
+that its lowest horizontal samples form a safe support plane.
+
+``--primitive-mode auto`` classifies each merged voxel candidate from its covariance
+eigenvalues, then verifies the candidate's normalized surface-fit error. Approximately
+isotropic regions may become spheres, elongated regions with a near-circular cross
+section may become cylinders or capsules, and locally planar regions may become
+oriented boxes. A planar box is rejected when projected support is too sparse or a
+gap exceeds ``--max-surface-expansion``; every rejected fit falls back to the bounded
+axis-aligned box baseline. Sphere, cylinder, and capsule fits must reduce normalized
+surface error by 30% relative to the candidate's oriented-box fit. Configure this
+gate with ``--min-round-error-improvement``. The report records both errors, their
+relative improvement, every primitive's type, pose, size, source candidate, and
+source-Gaussian count.
+
+For Native Viewer inspection, add ``--debug-color-by-type``. It writes translucent
+green boxes, magenta spheres, orange cylinders, blue capsules, and a translucent gray
+ground slab. The option changes only per-geom ``rgba``; collision type, pose, size,
+contact parameters, source mapping, and filtering remain unchanged. It requires
+``--primitive-mode auto`` so that a color always identifies a fitted primitive type.
+
+The default ``--primitive-mode boxes`` retains the original output and provenance
+format. Use it as the geometry-only control when evaluating ``auto``; changing mode
+is explicit and does not alter existing manifests or collision assets.
+
+Bent surfaces such as stair profiles can satisfy a coarse fill test and otherwise
+merge into a single ramp-like box. Add ``--max-planar-merge-residual 0.04`` to reject
+an approximately planar merged candidate when any occupied voxel center is more than
+4 cm from its best-fit plane. ``--planar-merge-eigenvalue-ratio`` controls which
+candidates are considered planar; non-planar candidates continue through the normal
+merge and primitive-fit path. The residual is an absolute distance in metres, so tune
+it with the voxel size and expected feature scale. The guard is disabled by default
+to preserve existing byte-stable output. It preserves synthetic doorway free space
+and separates a three-step surface into the expected support heights, but does not
+infer free-side thickness or merge coplanar candidates across disconnected regions.
+
+If a trusted source provides negative occupancy evidence, store finite world-space
+XYZ samples as an ``(N, 3)`` ``.npy`` array and add:
+
+.. code-block:: bash
+
+    --known-free-points /path/to/free_points.npy
+
+The generator rejects occupied/free voxel conflicts, prevents merged boxes from
+covering an in-bounds known-free sample, and prefers cuts that isolate constrained
+voids with fewer boxes. In ``auto`` mode it also rejects an oriented box, sphere,
+cylinder, or capsule fit that contains a known-free point and uses the safe bounded
+box fallback. The report hashes the sidecar and records its point and in-bounds voxel
+counts. Samples outside the generated quantile grid do not constrain the result.
+
+This input must come from camera-ray free-space carving, synthetic ground truth,
+manual annotation, or another explicit source. Gaussian centers provide positive
+surface evidence only; the tool deliberately does not label every unoccupied or
+unobserved voxel as free. The constraint therefore preserves demonstrated table
+undersides, pits, and gaps between levels, but it does not yet infer a wall's solid
+side or anchor slab thickness to that side.
+
+With ``--primitive-mode auto``, add ``--planar-slab-thickness 0.1`` to request a
+10 cm collision slab. Nearby known-free samples whose planar projections lie inside
+the candidate footprint vote for the free side. The plane is used as that slab face
+and thickness extends in the opposite direction. Configure the evidence window and
+required sign agreement with ``--planar-free-side-max-distance`` and
+``--planar-free-side-min-agreement``. If no eligible samples exist or the votes are
+ambiguous, the tool keeps the existing symmetric oriented box rather than guessing.
+Primitive diagnostics record whether anchoring occurred and the selected local-normal
+sign. This separates collision thickness from contact-surface position, but depends
+on explicit negative evidence and is not automatic wall-interior inference.
+
+For the covariance-aware comparison, add ``--use-gaussian-covariance``. The tool
+decodes ``scale_0..2`` and ``rot_0..3``, normalizes each quaternion, constructs
+``R diag(scale^2) R^T``, and adds the mean splat covariance to the center covariance
+used for candidate PCA. This changes shape classification axes, not the source
+centers or occupancy grid. Use ``--max-gaussian-scale 0.2`` to reject a splat when
+any activated axis exceeds 20 cm before voxelization. ``--scale-encoding`` selects
+Graphdeco logarithmic or linear scales. Invalid or degenerate shape fields fail with
+context. These options are disabled by default and are an experimental baseline;
+larger covariance support does not by itself prove a solid collision boundary.
+
+A replaceable semantic frontend can write one integer label per original PLY vertex
+as an ``(N,)`` ``.npy`` array and pass ``--semantic-labels``. Each occupied voxel
+uses deterministic majority voting with the smaller label winning exact ties. Boxes
+for one label treat other-label occupied voxels as forbidden boundaries, so merging
+cannot erase a labeled part boundary. ``--unknown-semantic-label`` identifies the
+unknown value for reporting; unknown samples remain a geometry-only group and are
+never silently discarded. Auto fits that expand into another label's source points
+fall back to their bounded candidate box. The source-map NPZ records the label of
+every output primitive, and the JSON report contains per-label output counts and a
+hash of the label sidecar. This is an input contract, not a bundled segmentation
+model; SceneSplat, multiview fusion, or manual labels must be evaluated separately.
+
+When aligned language features and class embeddings are available, decode them with:
+
+.. code-block:: bash
+
+    uv run scripts/tools/decode_3dgs_semantic_features.py \
+        /path/to/feat.pt /path/to/class_embeddings.pt /path/to/labels.npy \
+        --report /path/to/semantic_decode.json \
+        --minimum-similarity 0.2 --minimum-margin 0.05
+
+The decoder accepts NumPy arrays or tensor-only PyTorch files, normalizes rows, and
+uses blocked cosine nearest-class matching. Rows below either the best-score or
+top-two-margin threshold remain ``unknown``. A confidence NPZ and hashed report keep
+the label decision auditable and in original row order. The class embeddings must
+come from the same language feature space as the scene features. This utility does
+not download or run SceneSplat, encode text prompts, or establish label quality.
+
+For a fixed output budget, add ``--max-primitives N`` in auto mode. The default
+ranking retains candidates with more mapped source Gaussians. A JSON
+``--semantic-priorities`` mapping label IDs to positive weights and an optional
+non-negative ``--point-importance`` value per original PLY vertex can make the
+ranking task-aware. Priority inputs never create geometry or labels; they only
+select among fitted candidates, and the source-ID CSR is rebuilt for the retained
+subset. The report records the pre-budget count, budget, priority files, and hashes.
+
+Use ``compare_3dgs_collision_semantics.py`` to enforce a matched-budget experiment:
+
+.. code-block:: bash
+
+    uv run scripts/tools/compare_3dgs_collision_semantics.py \
+        /path/to/splats.ply /path/to/labels.npy /path/to/priorities.json \
+        /tmp/p8-semantic-ablation --max-primitives 32 \
+        --evaluation-points /path/to/evaluation.npz
+
+It produces geometry-only and semantic-priority MJCFs, requires both variants to
+reach exactly the requested budget, and benchmarks them with identical falling
+probes. Its report combines generation time, surface/free-space error, physics SPS,
+contacts, constraints, and solver iterations. Visual throughput remains explicitly
+unset because this rendering-independent CPU measurement cannot establish it.
+
+Run a task-level collision replacement comparison from a versioned variant manifest:
+
+.. code-block:: bash
+
+    uv run scripts/tools/benchmark_g1_collision_policy.py \
+        requirements/validation/p8-g1-policy-variants-2026-11-21.json \
+        --checkpoint /tmp/mjlab_cache/demo_ckpt.pt \
+        --motion /tmp/mjlab_cache/lafan1_dance1_subject1_demo_motion.npz \
+        --output /tmp/p8-g1-collision-policy.json \
+        --device cpu --seeds 42 43 44
+
+The local evaluator uses one fixed motion start, removes push events, preserves
+seeded startup randomization and actor corruption, and disables auto-reset so the
+terminal state remains measurable. Geometry evidence supplied by the manifest is
+stored beside MPKPE, root-relative MPKPE, end-effector and joint-velocity errors,
+termination terms, contacts, constraints, solver iterations, overflow bit flags,
+and policy-plus-environment throughput. It excludes rendering.
+
+On a CUDA-visible desktop with the custom MuJoCo wheel, add native 3DGS submission
+cost without changing the production play/demo scripts:
+
+.. code-block:: bash
+
+    uv run --no-sync scripts/tools/benchmark_native_3dgs_collision_policy.py \
+        requirements/validation/p8-g1-policy-variants-2026-11-21.json \
+        --gaussian-splat-file \
+        src/mjlab/asset_zoo/3dgs/ArtanimMotionCaptureStudio/scene_transform_20p.ply \
+        --checkpoint /tmp/mjlab_cache/demo_ckpt.pt \
+        --motion /tmp/mjlab_cache/lafan1_dance1_subject1_demo_motion.npz \
+        --output /tmp/p8-g1-native-3dgs.json --device cuda:0
+
+This opens one native window per variant. ``actual_realtime`` includes policy
+inference, MuJoCo Warp, CPU viewer synchronization, and native 3DGS submission;
+``viewer_submissions_per_second`` is not a monitor refresh or rendered-frame FPS.
+The finite throughput pass disables task terminations to avoid reset cost becoming
+an uncontrolled representation-dependent part of the timing; use the local joint
+evaluator above for success and termination comparisons.
+
+For an evaluation set that was not used as a generation constraint, create an
+``.npz`` containing ``surface_points`` and/or ``free_points`` arrays in world-space
+XYZ and pass ``--evaluation-points``. The report records mean, 95th-percentile, and
+maximum nearest-proxy surface distance plus the number and fraction of free probes
+strictly inside any output primitive. Unknown array names and malformed coordinates
+are rejected. Keep this archive independent from ``--known-free-points``; evaluating
+the same samples that forced a split only measures constraint satisfaction. Reports
+also state grid shape, retained connected components, discarded boxes, source
+mapping coverage, primitive-per-voxel ratio, representation type, and zero mesh
+vertex/face counts for the primitive-only path.
+
+Add ``--evaluate-source-surface`` for a diagnostic distance from every retained
+high-confidence Gaussian centre to the nearest generated primitive surface. This
+uses generation input rather than independent ground truth, so report it as a
+coverage diagnostic rather than an accuracy result.
+
+Measure primitive-only CPU collision cost independently from rendering with the
+same falling-sphere probes:
+
+.. code-block:: bash
+
+    uv run scripts/tools/benchmark_collision_mjcf.py \
+        /path/to/boxes.xml /path/to/auto.xml \
+        --output /tmp/collision_benchmark.json \
+        --warmup-steps 1000 --measured-steps 10000 --probe-grid 3
+
+The JSON records source hashes, compile and measured time, physics steps per second,
+model sizes, contacts, active constraints, and solver iterations. It accepts
+self-contained primitive and inline-heightfield MJCF files. File assets are rejected
+by default; ``--allow-file-assets`` permits only mesh files that resolve inside the
+MJCF bundle and records every dependency hash. Includes and external paths remain
+rejected. Run several repetitions on an otherwise idle machine before drawing
+performance conclusions; this tool deliberately does not include 3DGS rendering or
+policy inference.
+
+Compare reconstruction representations offline with:
+
+.. code-block:: bash
+
+    uv run scripts/tools/compare_3dgs_collision_representations.py \
+        /path/to/splats.ply /tmp/p8-representations \
+        --bounds -2 -2 -0.5 2 2 3 --voxel-size 0.1
+
+The command exports exact exposed occupancy faces, a TSDF zero-isosurface extracted
+with marching tetrahedra, a coarsened manifold TSDF mesh, a lowest-run heightfield,
+and a heightfield-plus-residual-primitive MJCF. The report includes topology repair,
+normal consistency, boundary/non-manifold edges, watertightness, surface distance,
+generation time, and MuJoCo compile counts. A heightfield is single-valued and reports
+columns containing multiple occupied runs; it cannot preserve ceilings or overhangs.
+The OBJ meshes are reconstruction baselines, not ready-to-load concave room collision
+geoms: MuJoCo uses the convex hull of a user mesh for collision, so a room requires
+convex decomposition or multiple locally convex pieces.
+
+Convert an external collision GLB/OBJ into an explicit MuJoCo convex bundle with:
+
+.. code-block:: bash
+
+    uv run scripts/tools/convert_collision_mesh_to_mjcf.py \
+        /path/to/collision.glb /tmp/mesh-collision \
+        --decomposition vhacd --max-convex-hulls 64 \
+        --free-points /path/to/independent_free_points.npy
+
+``component-hulls`` creates one convex geom per connected component and is useful as
+a coarse diagnostic. ``vhacd`` uses the installed trimesh V-HACD backend and fixes
+asynchronous decomposition off for byte-stable output. The report records hull budget,
+volume inflation, source-vertex distance, output hashes, and false occupancy of the
+optional free points. Neither method proves free-space correctness: inspect the probes
+and collision overlay before using the bundle for a task. The resulting MJCF can be
+passed to the benchmark with ``--allow-file-assets``.
+
+This baseline uses centers and opacity only. It does not apply a scene transform,
+infer units or axes, recover semantic parts, or prove that filled scan gaps are
+occupied. Primitive classification is a geometric heuristic, not object recognition.
+Review the collision overlay and contact behavior; use the report to compare parameter
+sweeps rather than treating the generated MJCF as ground truth. The command rejects
+voxel grids above 50 million cells by default; increase ``--voxel-size`` or tighten
+the quantile bounds before raising that limit.
 
 Use this asset layout so that the MJCF can resolve every dependency relative to
 its own directory:
@@ -334,6 +641,19 @@ The imported scene uses the conventional fixed ``terrain`` root body, so existin
 contact sensors continue to recognize it. ``TerrainHeightSensorCfg`` instances are
 automatically redirected to ``mjcf_geom_group``; this keeps foot-height observations
 on the external collision surface instead of the removed plane.
+
+Fixed-asset collision comparisons
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fixed-asset collision comparisons can use
+``scripts/tools/prepare_collision_comparison.py`` to freeze reference and automatic
+primitive MJCF copies with identical explicitly named common obstacles. This avoids
+confounding a collision replacement with removing artificially added obstacles.
+The original assets and manifest are not modified. Pass ``--automatic-report`` to
+check that the automatic MJCF and visual PLY match the generator's provenance.
+The resulting ``variants.json`` is accepted by the existing independent policy and
+native-viewer benchmark tools; preparation alone does not establish collision
+quality or task improvement.
 
 Viser transparent collision overlays
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

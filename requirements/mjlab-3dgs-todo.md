@@ -1,6 +1,6 @@
 # mjlab 3DGS 项目 TODO 与进度
 
-最后更新：2026-11-17
+最后更新：2026-11-25
 
 ## 0. 项目总览
 
@@ -16,8 +16,8 @@
 | P5 | 统一场景资产 | **完成** | 为 P7/P8 提供稳定场景契约 |
 | P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
 | P7 | 3DGS 安全感知速度跟踪 | 规则深度安全层及 36 组场景验证完成，按当前范围收口 | 学习式感知安全层（另行开展） |
-| P8 | 自动碰撞生成 | apartment 场景专用几何原型完成 | 泛化几何算法、可替换语义前端与质量评估 |
-| P10 | 性能与发布 | 部分完成 | check/test/docs 与 benchmark |
+| P8 | 自动碰撞生成 | **完成，按用户决定收口** | 地板拼接、独立语义准确率与安全保证作为已知限制，不再追加修补 |
+| P10 | 性能与发布 | **进行中：固定资产对照完成，缓存验证中** | 缓存回归验收、传感/训练吞吐矩阵及完整测试 |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
 
 “基础完成”表示核心链路已经实现，但扩展能力和最终验收仍存在
@@ -36,13 +36,13 @@ mjlab 3DGS
 ├── 物理场景
 │   ├── P4 外部 collision-only MJCF                [MVP 完成，阶段收口]
 │   ├── P5 PLY/MJCF manifest 与统一 transform      [完成]
-│   └── P8 3DGS 自动碰撞代理生成                   [场景专用原型完成；待泛化]
+│   └── P8 3DGS 自动碰撞代理生成                   [完成；按当前范围收口]
 ├── 视觉闭环训练
 │   ├── P6 YAM Vision → G1 depth observation       [完成]
 │   ├── P7 3DGS 安全感知速度跟踪               [规则基线场景验证完成；学习式后续]
 │   └── 单台阶、楼梯、复杂地形与间隙               [后续扩展]
 └── 质量与论文
-    ├── P10 测试、文档、性能和发布                 [部分完成]
+    ├── P10 测试、文档、性能和发布                 [进行中；固定资产对照完成]
     └── P11 基线、消融、论文材料                   [持续进行]
 ```
 
@@ -140,6 +140,10 @@ P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前�
   collision-only MJCF。该脚本包含 apartment 专用范围、地面和障碍设定，
   不代表已实现跨场景或语义碰撞生成。过滤后不再保证覆盖所有原占据 voxel，
   小型真实表面也可能被移除，接触敏感用途仍需检查碰撞叠加效果。
+- 已提供场景无关的 center-only voxel/box 命令行基线：从任意兼容 PLY 导出
+  collision-only MJCF、独立哈希报告和 box 到原始 Gaussian ID 的确定性映射。
+  apartment 真实资产复跑得到与专用原型相同的 20,468 个占据 voxel、89 个
+  合并候选及 36 个 surface box；这不代表跨场景几何质量已验收。
 - 已提供 schema v1 scene manifest，将 PLY、collision MJCF、坐标约定、
   统一 transform 和 spawn-point metadata 绑定为一个入口；
   train/play/demo 均可加载。
@@ -154,27 +158,32 @@ P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前�
   指标留作后续加固，不阻塞 P4 MVP 收口。
 - P6 已完成深度语义、动态覆盖率、1/4-world 短性能和 PPO 链路验收；尚未
   证明视觉任务增益，长训练与任务级多种子对照属于 P7/P11。
-- 尚未建立 3DGS 场景中的安全感知速度跟踪任务；尚未验证遇到前方障碍时
-  的减速、停车、原地旋转搜索、安全选向和恢复跟踪。P7 不包含世界坐标导航；
-  单台阶、楼梯和复杂地形后移。
-- apartment 已有从 3DGS Gaussian 中心生成 box 碰撞代理的场景专用原型；
-  尚未形成可跨场景泛化、自动推断结构或利用语义信息的完整算法。
+- P7 规则深度安全层已完成减速/停车与 36 组场景验收；学习式安全层、主动
+  转向搜索、安全选向和恢复跟踪仍未完成。P7 不包含世界坐标导航；单台阶、
+  楼梯和复杂地形后移。
+- P8 场景无关的 center-only voxel/primitive MVP、内部 mesh/TSDF/heightfield
+  表示对照、固定预算选择、SplatTransform 外部输出及实际语义/含视觉任务对照
+  已完成；未测独立语义准确率、不保证碰撞安全，也未证明语义策略收益。
 - 尚未完成可选预处理缓存和正式性能基准；二者属于后期性能优化，不阻塞
   当前功能里程碑。
 
 ### 当前首要目标
 
-P3、P4 已按当前范围收口，P5、P6 已完成。P6 复用 YAM Vision 的
+P3、P4、P7 已按当前范围收口，P5、P6 已完成。2026-11-24 用户明确将 P8
+标记完成，地板拼接等已知限制归档，不再作为当前修补主线。当前推进 P10：
+固定 apartment 视觉资产与既有 G1 checkpoint/motion 的原有/通用自动碰撞
+CPU/CUDA/native 对照已完成并于 2026-11-25 核验；当前实现并验证默认关闭的
+版本化预处理缓存，随后为传感/训练吞吐矩阵及完整测试。原有模型的额外可见
+柱体在两组实验副本中保持一致，
+不得悄悄改变场景来宣称碰撞生成收益；原始 P7/P8 资产保持不变。P6 复用
+YAM Vision 的
 CameraSensor、标准化 depth、二维 observation group、Spatial-Softmax CNN
 和 RSL-RL；单帧、validity、时序、robust 与 asymmetric 小规模 PPO 更新及
-恢复训练链路已通过。项目主线调整为参考
-GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 MuJoCo Warp
-原生渲染。RGB 保留为后续对照。P7 先做平坦支撑面场景中的安全感知速度
-跟踪：机器人在无障碍时跟踪速度命令，遇到前方障碍时减速或停车，必要时
-原地旋转搜索安全方向，然后恢复速度跟踪。P7 不依赖位置传感器、目标坐标
-或全局地图。P7 使用当前已校验的 apartment 视觉/碰撞版本建立固定
-基线，不等待 P8 泛化或语义生成算法；后续 P8 输出必须作为独立版本替换
-对照，不能在训练中途覆盖。NPZ 缓存仍属于 P10 后期优化。
+恢复训练链路已通过。项目保留参考 GaussGym 的真实重建场景视觉运动路线，
+继续复用 mjlab、G1 与 MuJoCo Warp 原生渲染，RGB 作为后续对照。P8 输出必须
+作为独立版本与 P7 已冻结的 apartment 视觉/碰撞基线替换对照，不能在训练
+中途覆盖。NPZ 渲染缓存仍属于 P10 后期优化；本轮 source-ID sidecar 只服务
+碰撞生成 provenance，不是渲染缓存。
 
 ## 3. 已完成工作
 
@@ -331,7 +340,6 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 - [x] 完成 viewer off/on/off/on 四轮各 10 秒初测，记录 Actual RT、提交
   频率、设备总显存与窗口加载时间。正式显示 FPS、进程显存和完整场景
   初始化耗时尚未测量，不关闭上一项。
-
 2026-10-30 六项验收的详细结果见
 `validation/p3-acceptance-2026-10-30.md`，原始 JSON 和直接加载失败记录
 一并保存在 `validation/`。自动工具为 `tests/run_g1_3dgs_acceptance.py`。
@@ -407,6 +415,84 @@ GaussGym 的真实重建场景视觉运动/导航训练，保留 mjlab、G1 与 
 
 ### H. 当前验证证据
 
+- [x] 2026-11-21 P8 MVP 验证（非完整 P8 验收）：``make check`` 全绿，碰撞生成与 apartment
+  定向回归 ``24 passed``，``make docs`` 成功；共享 ``play.py``、``demo.py`` 及其
+  配置测试保持零差异。完整 ``make test`` 首次被系统 ROS pytest plugin 缺失
+  ``lark`` 阻断；禁用外部 plugin 并把 Warp cache 指向 ``/tmp`` 后，P8 新增测试
+  全部通过，仓库仍有 4 个缺失未纳入仓库的 ``scene_transform.ply`` slow-test
+  失败和 1 个既有 Studio pillar alpha 0.8/测试期望 1.0 失败，末尾 ``wandb``
+  测试在受限网络环境中不退出。因此不把完整仓库测试写成全绿。
+- [x] 2026-11-21 P8 独立 CPU collision benchmark：新增不经过 viewer、3DGS
+  renderer 或 policy 的统一落球探针工具，记录输入 hash、编译时间、physics SPS、
+  ``ncon/nefc`` 与 solver iteration。Artanim 同为 3×3 probe、1,000 warmup、
+  10,000 measured steps 时，center-only 306 primitive 为 20,382 steps/s，
+  0.2 m scale 上限的 covariance-aware 276 primitive 为 20,563 steps/s；接触均值
+  分别为 12.0846/12.0825，约束均值为 48.3384/48.3300。这里只是一轮 CPU
+  小探针结果，用于证明测量链路与量级，不声明 0.9% 差异可复现或代表含视觉吞吐。
+- [x] 2026-11-21 P8 独立质量 probe：新增 ``--evaluation-points`` NPZ，与生成用
+  known-free sidecar 分离；输出 reference surface 最近代理距离 mean/p95/max 和
+  free-space false-occupied count/fraction。三阶楼梯回归 surface max distance 为
+  0.075 m、free probe 误占为 0；桌底、3×3 坑洞、双层间隙在无约束时全部 probe
+  被误占，约束后均为 0。report 同时记录 grid shape、连通分量、丢弃 box、映射
+  覆盖率、primitive/voxel 比及 primitive-only 的 0 mesh vertex/face 语义。
+- [x] 2026-11-21 P8 semantic sidecar 契约：CLI/API 接受与原 PLY vertex 一一
+  对齐的整数 ``(N,)`` 标签；voxel 采用确定性多数票，跨标签 occupied voxel
+  作为 merge 禁区，auto fit 扩张到其他标签 source point 时回退 AABB。unknown
+  默认 ``-1``，保留为 geometry-only residual。双层 synthetic 在无标签时被填实，
+  标为 ``3/-1`` 后分为两个边界且 source-ID 全覆盖；输出 NPZ 记录每 primitive
+  标签，report 记录 sidecar hash、unique label 与逐标签计数。尚未声称 SceneSplat
+  解码质量通过。
+- [x] 2026-11-21 P8 covariance-aware 基线：新增 Graphdeco scale/rotation 解码、
+  quaternion 归一化与 ``R diag(scale²) Rᵀ``，可选加入 candidate center covariance
+  后再做 PCA；``max_gaussian_scale`` 在 voxelization 前过滤任一轴过大的 splat。
+  Artanim 最大 scale 分布为 median 0.0228 m、p99 0.1309 m、max 124.8851 m；以
+  0.2 m 上限和 covariance-aware auto 生成 554 merged candidate、172 primitive
+  （163 box、9 cylinder），映射 183,409 Gaussian，MuJoCo 编译为 173 geom（含
+  ground）成功。该证据建立可运行对照，不证明其质量优于 center-only 205
+  primitive 结果。
+- [x] 2026-11-21 P8 known-free 约束阶段：生成 API 与 CLI 接受可选 ``(N, 3)``
+  world-space ``.npy`` 点，输入文件哈希、点数及网格内唯一 voxel 数进入 report；
+  occupied/free 冲突直接报错。merge 切分优先减少仍包围 free voxel 的子候选，
+  auto sphere/cylinder/capsule/OBB 若侵入约束点则回退候选 AABB。synthetic 桌底、
+  3×3 坑洞和双层间隙均从“无约束时被填实”变为零 probe 误占，box 预算分别
+  不超过 12/6/2；碰撞生成与 apartment 回归 ``17 passed``。未提供 sidecar 时
+  apartment 仍生成 20,468 occupied voxel/36 box，MJCF SHA-256 为
+  `df1fe9cc451ae4a980f2605f0f5a0fc76a3886df6252ef229baacec08fd806f8`，NPZ 为
+  `3ba252d650ce25c5cc295ad360a580a195e5573269cb96c66cc1f19fd48034aa`。
+- [x] 2026-11-20 P8 平面 merge 残差阶段：新增默认关闭的绝对距离约束，仅对
+  PCA 判定为近似平面的 merged candidate 生效。synthetic 门洞在默认与 4 cm
+  约束下均保持可通行；三阶楼梯不再被单个 ramp-like box 跨越，两个自由空间
+  probe 未被占用，支撑高度为 0.1/0.3/0.5 m，使用 4 个 box。Artanim 以 4 cm
+  阈值生成 554 个 merged candidate 和 205 个 primitive（196 box、9 cylinder），
+  MuJoCo 编译为 206 个 geom（含 ground）成功；相比无约束的 190 个 primitive
+  增加 15 个。两次 MJCF SHA-256 均为
+  `004dcacbaf05bd6037af01661ec74030c8b34ecb1a279e8e7ccf42cd2566bf15`，NPZ 均为
+  `8f98317f910113949cc72cb2a18b29020125c74031da79bef8b39d487d1abfef`；相关
+  play/demo/collision 聚焦回归 `30 passed`，尚未完成人工 overlay 质量验收。
+- [x] 2026-11-20 P8 center-only 多 primitive 原型：synthetic sphere、cylinder、
+  capsule、带门洞平面及 source mapping/XML 回归通过。Studio 默认 auto 运行从
+  16,400 个 occupied voxel、466 个 merged candidate 生成 190 个 primitive：
+  183 box、7 cylinder、0 sphere、0 capsule，映射 196,189 个 Gaussian；7 个
+  cylinder 相对 oriented-box 误差改善 33%--49%，MuJoCo 编译为 191 个 geom
+  （含 ground）成功。两次 auto 输出的 MJCF SHA-256 均为
+  `ebde35bf8f50a8a93f4d0b34072aaeba64662aab8e523826a4153230d9a786a0`，NPZ
+  均为 `28e223819dfd113c6d076dc16fa6cf73c1976f8b3a46f2da0ecb1620e8e529f2`。
+  结果证明类型选择、导出和字节确定性可运行，不代表 7 个 cylinder 的语义或
+  碰撞质量已人工验收。
+- [x] 2026-11-20 Studio 类型着色诊断资产生成成功：正常与 debug MJCF 均编译为
+  191 个 geom，逐项比较 `geom_type/pos/quat/size/friction/contype/conaffinity/
+  condim` 完全一致；source-ID NPZ SHA-256 均为
+  `28e223819dfd113c6d076dc16fa6cf73c1976f8b3a46f2da0ecb1620e8e529f2`。该证据
+  证明着色不改变物理，不替代 Native Viewer 人工语义验收。
+- [x] 2026-11-20 P8 scene-independent center-only collision baseline 定向回归：
+  `tests/test_3dgs_collision_generation.py` 与既有 apartment 合并回归共
+  `13 passed`；Ruff check、定向 ty 和 Pyright 通过。真实 apartment PLY 经通用
+  CLI 两次独立生成均得到 20,468 个 occupied voxel、89 个 merged candidate 和
+  36 个 retained surface box；两次 MJCF SHA-256 均为
+  `df1fe9cc451ae4a980f2605f0f5a0fc76a3886df6252ef229baacec08fd806f8`，两次
+  source-ID NPZ SHA-256 均为
+  `3ba252d650ce25c5cc295ad360a580a195e5573269cb96c66cc1f19fd48034aa`。
+  该证据验证接线、既有资产复现和字节确定性，不代表第二场景或碰撞质量通过。
 - [x] 2026-11-09 完成 P7 无定位安全速度跟踪 requirements 一致性检查；
   `git diff --check` 通过，`src/` 和 `tests/` 无本轮变更。离线运行：
 
@@ -1060,6 +1146,18 @@ P4/P5 契约已经建立，P8 可与 P7 并行，不依赖视觉训练或台阶�
 [语义简化调研](mjlab-3dgs-p8-semantic-collision-research.md)：先做有限平面/
 box 几何基线，再接可替换语义前端，残差使用有限数量的凸体或局部 mesh。
 
+P8 MVP 于 2026-11-21 完成以下范围：场景无关且确定性的
+PLY→voxel→box/简单 primitive 生成、source-ID/provenance、显式 known-free 与
+语义 sidecar 契约、有限平面/free-side 约束、synthetic 五类结构真值、第二真实
+场景生成与 MuJoCo 编译、表面距离统计及独立 CPU collision benchmark。未包含
+模型推理的“语义 sidecar”不等于自动语义识别。后续已完成内部
+TSDF/marching-tetrahedra、mesh/heightfield 混合和固定预算选择/CPU 消融；
+CUDA policy 与 native-3DGS 任务联合评价后续已完成。
+2026-11-24 用户明确不做手工类别标注、算法不能判断时保留 unknown；按此最新
+口径，实际特征/语义解码、unknown/几何回退及固定预算 CPU/CUDA/native 对照
+已完成工程验收。独立真值准确率改为可选研究验证，未测即未测，不用 synthetic
+人工标签替代，也不以收口声明暗示语义有效、接触安全或跨场景质量已获保证。
+
 ### G0. 算法基线
 
 - [x] 完成语义前端、平面/primitive 重建和碰撞生成方法的首轮专题调研，
@@ -1067,52 +1165,179 @@ box 几何基线，再接可替换语义前端，残差使用有限数量的凸�
 - [x] 建立 apartment 场景专用 center/voxel/box 原型：过滤 Gaussian 中心、
   清理小连通分量、在受限表面扩张下合并 box，并生成 collision-only MJCF；
   明确其场景常量、人工障碍和无语义能力边界。
-- [ ] 建立 center-only 有限平面/box 基线，保留门洞、地面边界和台阶边缘。
-- [ ] 小区域评估 SceneSplat 特征解码和标签质量；在相同 geom 预算下比较
-  geometry-only 与语义引导方案，保留人工标签作为诊断上界。
-- [ ] 建立 center-only 点云/voxel 基线。
-- [ ] 建立利用 Gaussian scale、rotation、opacity 的 covariance-aware 基线。
-- [ ] 比较 voxel occupancy、TSDF 和 marching cubes。
-- [ ] 比较 heightfield、mesh/primitive 混合表示。
-- [ ] 复现或对照 SplatTransform 等公开工程方案。
-- [ ] 评估 MuJoCo Warp 当前版本下的 SDF 路径。
+- [x] 建立 center-only 有限平面/box MVP 基线，保留门洞、地面边界和台阶
+  边缘。auto 模式已有局部 PCA oriented box、投影支持率和大孔洞拒绝，opt-in
+  平面残差约束通过 synthetic 门洞和三阶楼梯自由空间/支撑高度回归；显式
+  known-free 证据可锚定 slab 自由侧与厚度。跨 candidate 共面合并和无负证据的
+  PLY-only 实体侧推断保留为研究扩展。
+- [x] 小区域评估实际 SceneSplat 特征解码、空间分布与 unknown 行为；在相同
+  geom 预算下比较 geometry-only 与自动语义方案。按 2026-11-24 用户确认，
+  不要求手工类别标注；独立准确率未验收，人工标注接口保留为可选诊断。
+  **2026-11-24 用户澄清：**不要求用户手工分类，自动算法不确定的类别应输出
+  unknown。人工标注与独立准确率不再作为自动生成流程的运行前置条件；保留
+  评分接口作为可选诊断，未测指标仍明确记为未验证，不能伪造真值或语义收益。
+  2026-11-24 已恢复并核验实际 `(659010,768)` 特征，完成官方 InteriorGS
+  72 类解码；0.01 margin 实验门限下 79.48% 为 unknown，不能视为标签准确。
+  详见 [实际特征诊断](validation/p8-scenesplat-artanim-2026-11-24.md)；
+  另完成实际标签的 32-geom 同预算分区/CPU 落体诊断，两份 MJCF 均编译通过。
+  该轮没有独立 surface/free probes，人工标签质量及语义收益验收仍未完成。
+  已增加独立三视图/图例及盲标样本导出工具；中心区域 23,933 行中，
+  原始 floor 19,901 行、过滤后 floor 0 行，说明 0.01 margin 不可直接作为
+  地面剔除规则。48 个样本的人工标注留空，待独立核验后才计算质量。
+  独立评分工具已实现 source-ID/XYZ 校验、abstention-aware precision/recall/IoU
+  与阈值诊断；实际 0/48 标注报告为 awaiting_annotations，不产生虚假准确率。
+  已增加 opt-in 自动回退包装器：unknown 超过 50% 时直接采用纯几何基线；
+  否则语义候选必须不降低 source mapping coverage，且 mean/p95/max source
+  距离不超过基线 1.05 倍。Artanim 79.48% unknown 实测触发回退，输出
+  257 geoms（254 box、3 cylinder）；语义标签保持 unknown，不反向伪造类别。
+- [x] 建立场景无关的 center-only 点云/voxel/axis-aligned box 基线；输出
+  collision-only MJCF、独立 report 和 box→原始 PLY vertex ID 映射。apartment
+  真实资产复跑与现有专用原型得到相同的 20,468/89/36 统计。
+- [x] 增加显式 `--primitive-mode auto`：按局部协方差特征和归一化表面误差
+  选择 oriented box、sphere、cylinder 或 capsule，拟合失败时回退原有 bounded
+  axis-aligned box；round primitive 还必须相对 oriented-box 基线降低至少 30%
+  误差，避免仅因 PCA 形状比率误判；默认 `boxes` 模式及既有输出保持不变。
+- [x] 建立利用 Gaussian scale、rotation、opacity 的 opt-in covariance-aware
+  基线：opacity 继续参与前置过滤，scale/rotation 构造每点 covariance 并加入
+  candidate PCA；默认 center-only 不分配 covariance。
+- [x] 比较 voxel occupancy、TSDF 和 marching-tetrahedra 等值面。固定
+  Artanim crop 的 exact occupancy、0.1 m TSDF 和 0.2 m coarse TSDF 均导出
+  确定性 OBJ；report 记录生成时间、顶点/面、拓扑与 source-surface 距离。
+  exact occupancy 有 245 条 non-manifold edge，TSDF 与 coarse TSDF 为闭合、
+  winding-consistent，故不把所有 voxel surface 泛称为可用 collision mesh。
+- [x] 比较 heightfield、mesh/primitive 混合表示。新增 lowest/highest surface、
+  bounded hole fill 与多层歧义列诊断；Artanim crop 的 42×42 heightfield 有
+  205 个歧义列，混合 MJCF 为 1 heightfield + 24 residual primitives，并与
+  43-primitive 基线用相同 falling probes 完成 CPU contact benchmark。
+- [x] 复现 SplatTransform 3.12.0（commit ``5d5be2b``）公开工程方案。相同
+  Artanim crop/0.1 m voxel/0.1 opacity 在 llvmpipe WebGPU 上生成官方 voxel
+  octree 与 ``faces``/``smooth`` collision GLB；smooth 为 2,227 vertices、
+  4,406 faces、12 components、watertight，10k crop center 距离 mean/p95/max
+  0.1024/0.2174/0.6447 m。软件 adapter 时间不代表真实 GPU；凹 GLB 在 MuJoCo
+  单 mesh geom 中会退化为整体凸包。后续已完成 component-hull 与确定性 V-HACD
+  转换：12/64 geoms 的体积膨胀为 1.442×/1.172×，21 个 manifest spawn free
+  probe 均未误占，并完成相同 3×3 falling-probe CPU contact 对照。
+- [x] 完成 MuJoCo/MuJoCo Warp 当前 SDF 路径的接口与本地可用性评估：SDF 是
+  需实现和注册的 engine plugin，并以迭代梯度查询参与碰撞；当前 venv 没有可
+  直接复用的 SDF plugin 动态库/示例。故不把它伪装成已运行基线，实际实现与
+  primitive/mesh 的接触性能比较转为需要新后端工作的研究扩展。
 
 ### G1. 生成管线
+
+2026-11-24 后续地板质量加固：新增默认关闭的水平面合并/顶面对齐路径，重用
+原始 candidate footprint 并集，不新增无限 plane，不改变 play/demo。它不是整房
+地板语义识别；只合并近水平、同标签且已有顶面高度接近的块，保留明显层高差、
+斜坡、显式 known-free 和 footprint 孔洞。原始已验收碰撞不覆盖，候选另存并
+测量源点覆盖和 MuJoCo 向下射线，详见
+[地板拼接加固](validation/p8-horizontal-surfaces-2026-11-24.md)。
 
 apartment 原型已局部覆盖 opacity/bounds 过滤、体素化、连通分量清理、
 box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场景、带报告的
 通用管线”口径验收，因此在原型泛化前保持未完成。
 
-- [ ] 在独立 collision report/sidecar 中记录生成参数、随机种子、工具版本、
-  输入哈希和 Gaussian ID 映射；保持现有 manifest v1 契约不变。
-- [ ] 实现语义 sidecar 输入与部件分组，明确未知标签及几何残差的处理。
-- [ ] 实现有限 footprint、厚度和自由侧约束，按误差与 geom 预算合并/拆分
-  box；避免填实门洞、桌底或未观测区域。
-- [ ] 实现 opacity、scale、bounds 和离群点过滤。
-- [ ] 实现体素降采样、连通分量清理和孔洞处理。
-- [ ] 实现表面/占据重建。
-- [ ] 实现网格修复、法线统一和简化。
-- [ ] 导出 collision-only MJCF 和引用资产。
-- [ ] 保证相同输入、参数和种子输出可复现。
+- [x] 在独立 collision report/sidecar 中记录生成参数、确定性 seed 语义、工具
+  版本、输入/输出哈希、坐标假设和 Gaussian ID 映射；保持 manifest v1 不变。
+- [x] 实现模型无关的整数语义 sidecar 输入与部件分组；voxel 多数票、跨标签
+  merge 禁止、auto fit 跨界回退均确定性执行。unknown 标签保留为独立几何残差，
+  不自动当自由空间或丢弃；output→source CSR 同步记录 primitive 标签。另提供
+  SceneSplat-style aligned feature + class embedding 的 blocked cosine 解码器，按
+  similarity/margin 阈值输出 unknown 与置信度报告；不内置 checkpoint/text encoder。
+- [x] 实现有限 footprint、厚度和自由侧约束的 MVP，按误差与占据边界合并/拆分
+  box；避免填实门洞、桌底或未观测区域。当前 opt-in 平面残差只阻止近似
+  平面 candidate 跨越弯折/台阶过度合并；另已支持显式 world-space known-free
+  点作为负占据约束，merge 优先隔离约束 void，auto primitive 侵入时回退安全
+  AABB。配置 ``planar_slab_thickness`` 后，footprint 内邻近 known-free 点以符号
+  一致率判断自由侧，拟合平面作为自由面，厚度只向相反实体侧延伸；证据缺失或
+  两侧冲突时保留对称拟合。PLY-only 自动实体侧推断、跨 candidate 合并及全局
+  固定 geom 预算优化保留为研究扩展。
+- [x] 实现 opacity、scale、quantile bounds 和离群点过滤：支持最大 Gaussian
+  axis scale、密度阈值、小连通分量及 quantile 空间边界；参数及统计进入 report。
+- [x] 实现 center-only 体素降采样、连通分量清理和有界 scan-gap 填充；更一般
+  的表面孔洞/自由空间推断仍归后续有限平面与 mesh 路线。
+- [x] 实现表面/占据重建：exact exposed occupancy surface、binary TSDF 与
+  无 scikit-image 依赖的 marching tetrahedra zero isosurface 均有 synthetic
+  watertight 回归和 Artanim 实际输出。
+- [x] 实现网格修复、法线统一和简化：合并顶点、删除重复/退化面、清理未引用
+  顶点、修复 winding/normals，并报告 boundary/non-manifold/watertight；提供
+  vertex clustering，并以 coarse occupancy remeshing 生成保持流形的简化对照。
+- [x] 导出含 box、sphere、cylinder、capsule 的 collision-only MJCF；自动模式
+  在 report 中逐 primitive 记录类型、位姿、尺寸、误差、oriented-box 对照误差、
+  相对改善、candidate 和 source Gaussian 数。另支持确定性 OBJ、inline
+  heightfield 以及外部 GLB 的 component/V-HACD 多凸 mesh MJCF；file-backed
+  benchmark 只在显式 opt-in 时接受 bundle-local mesh 并哈希全部依赖。
+- [x] 增加显式 `--debug-color-by-type` 人工 overlay 诊断：box 低透明绿色、
+  sphere 洋红、cylinder 橙色、capsule 蓝色、ground 低透明灰色；仅写 MJCF
+  `rgba`，不改变碰撞类型、位姿、尺寸、接触参数和 source mapping。
+- [x] 保证相同输入和参数输出字节稳定的 MJCF 与 source-ID NPZ；算法无随机
+  采样，report 将 seed 记录为 null。
 
 ### G2. 质量与任务感知简化
 
-- [ ] 建立含门洞、桌腿、台阶、坑洞和多层结构的 synthetic ground truth；
-  单独统计误占自由空间、支撑高度与边缘误差。
-- [ ] 比较固定 geom 预算下的语义消融，并分别测量离线生成时间、独立
-  physics SPS、接触/求解开销与含视觉的端到端吞吐。
-- [ ] 输出 splat、顶点、面、连通分量、包围盒和简化统计。
-- [ ] 检查退化面、重复面、非有限数据和明显非流形问题。
-- [ ] 计算碰撞表面与高置信度 Gaussian 的距离指标。
-- [ ] 研究 Gaussian scale、rotation、opacity 对碰撞表面的贡献。
-- [ ] 优先保留地面、台阶、扶手、落脚区和可操作表面。
-- [ ] 建立几何误差、接触稳定性、策略性能和仿真吞吐的联合
-  评价。
+- [x] 建立含门洞、桌腿、台阶、坑洞和多层结构的 synthetic ground truth；
+  单独统计误占自由空间、支撑高度与边缘误差。五类结构均已有定向回归：门洞
+  与桌底/桌腿检查 free-space，三阶楼梯验证 0.1/0.3/0.5 m 支撑高度，3×3 坑洞
+  与双层间隙验证负占据约束及 box 预算；独立 evaluation probe 输出表面距离及
+  false-occupied 数量/比例。
+- [x] 比较固定 geom 预算下的语义消融，并分别测量离线生成时间、独立
+  physics SPS、接触/求解开销与含视觉的端到端吞吐。固定预算选择、synthetic
+  人工真值的 geometry-only/semantic-priority 2-geom 对照及 CPU generation/SPS/
+  ncon/nefc/solver 报告已完成。相同 manifest 的 CUDA policy 与 native 3DGS
+  视觉实测也已完成：无渲染为 76.10--80.20 control SPS，native actual realtime
+  为 0.498--0.571、24.90--28.54 submissions/s。2026-11-24 又完成真实
+  SceneSplat raw/unknown 方案与 geometry-only 的 32-geom 对照：三种子
+  CUDA 几何为 3/3 跑满、两种语义均 2/3，未证明语义收益；四种 native
+  均 ready、500 submissions、overflow=0，actual RT 0.485--0.526。
+  策略运行部分 seed 有 LS_ITERATIONS 警告，逐项记录而不伪装成全部稳定。
+- [x] 输出 input/filtered/mapped splat、occupied voxel、连通分量、grid/bounds、
+  merged/retained/discarded box、primitive 类型/标签及简化比率；primitive-only
+  表示明确记录 mesh vertex/face 为 0，避免与 mesh 路线混淆。
+- [x] primitive-only 输出没有三角面、重复面或非流形拓扑；导出前显式拒绝
+  非有限中心/四元数/尺寸、非单位四元数、非正尺寸及与 geom 类型不匹配的尺寸
+  元数。mesh/heightfield 路线仍须单独执行拓扑检查。
+- [x] 计算碰撞表面与高置信度 Gaussian 的距离指标。``--evaluate-source-surface``
+  在 Artanim center-only 306 primitive 上得到 mean/p95/max =
+  0.0714/0.1948/1.4517 m；该输入覆盖指标不是独立 ground truth。
+- [x] 完成 Gaussian scale、rotation、opacity 的首个可执行消融接口与真实资产
+  对照：opacity 始终参与过滤，scale 上限可清理极端 splat，scale+rotation
+  covariance 可选参与 PCA。Artanim 0.2 m scale/covariance 对照为 276 primitive，
+  source distance mean/p95/max = 0.0739/0.1998/2.9931 m，未优于 center-only；因此
+  不将 covariance-aware 设为默认，也不从 primitive 数减少推断质量改善。
+- [x] 提供显式任务优先级选择接口：auto 模式可固定 ``--max-primitives``，
+  ``--semantic-priorities`` 对地面/台阶/扶手/落脚区/可操作表面标签加权，
+  ``--point-importance`` 对具体 source Gaussian 加权；排序稳定且重建 CSR。
+  该项只声明接口与 synthetic 效果，不声称 SceneSplat 已正确识别这些类别。
+- [x] 建立几何误差、接触稳定性、策略性能和仿真吞吐的联合评价。新增独立
+  manifest-driven G1 evaluator，在不修改 Play/demo 的前提下固定 checkpoint、
+  motion、seed、起始帧与有限时域，将既有几何证据、MPKPE/R-MPKPE/末端与关节
+  速度误差、终止项、ncon/nefc/solver、overflow bit flag 和 policy+env SPS 写入
+  同一报告。Artanim 三种子 CPU 对照中平面控制 3/3 跑满，其余四种自动代理均
+  仅 1/3 跑满，主要由 ``ee_body_pos`` 终止，证明几何距离较小不等于任务可用。
+  companion native-3DGS evaluator 已按相同 manifest 完成 CUDA 实测；五个表示
+  均完成 500 次提交、``gaussian_status=ready`` 且 overflow bitmask 为 0。CUDA
+  policy/native 报告哈希和逐表示结果见验证记录；共享 Play/demo 未修改。
 
 ## 10. 性能、质量与发布
 
+已完成的首个子任务见 [P10 固定资产 benchmark](mjlab-3dgs-p10-benchmarks.md)。
+该轮仅为碰撞替换的性能/接触/跟踪对照，不重开 P7 场景验收，不做新训练或 PR。
+
+- [x] 冻结 apartment 原有碰撞与通用自动碰撞实验副本，显式给两组保留相同
+  人工柱体，校验自动产物对应的 PLY/report 哈希，原始资产不覆盖。
+- [x] 完成相同落体 probe 与三种子 CPU policy 对照并归档原始结果。两组均
+  3/3 跑满 500 步、overflow=0；reference/automatic 的 control SPS 为
+  22.67/19.63、MPKPE 为 0.11799/0.13235 m，不宣称自动碰撞收益。
+- [x] 用户完成相同两变体的 CUDA policy/native-3DGS 对照，2026-11-25 已核验
+  碰撞、PLY、checkpoint/motion 哈希与协议。CUDA 两组均 3/3 跑满，SPS 为
+  80.51/80.59，MPKPE 为 0.09757/0.15803 m；seed 42 均有 LS_ITERATIONS。
+  native 两组均 ready、500 submissions、overflow=0，actual RT 0.770/0.760。
+  不宣称自动碰撞收益，不覆盖原有资产；P10 其它项目保持未完成。
+
 - [ ] **后期优化：**实现版本化 `splats.npz` 预处理缓存、原子写入，
   并在源 PLY、导入参数、transform 或 schema 变化时自动失效。
+  2026-11-25 已实现可选 cache_dir、内容/参数 key、NPZ 数据校验和原子替换，
+  正在完成回归、make check 与文档验收；未配置缓存时不做哈希或缓存 I/O。
+  真实 apartment/Artanim 已测未缓存、首次建缓存与热缓存三阶段，输出数组
+  完全相同。证据见 [缓存验证](validation/p10-splat-cache-2026-11-25.md)。
 - [ ] 为无 3DGS、Viser-only、MJWarp camera 和视觉训练分别建立正式
   benchmark。
 - [ ] 记录初始化、PLY 解析、BVH、浏览器上传、physics、policy 和
@@ -1154,17 +1379,134 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 
 ## 13. 推荐执行顺序
 
-1. 当前主线推进 P7：先标定 collision-truth 连续安全教师，再用 P6 时序
-   depth+validity 监督训练安全速度 Student，并在冻结 locomotion Actor 后比较
-   blind、规则 adapter、teacher、mesh vision 和 3DGS vision。转向搜索与局部
-   目标选择在稳定停车验收后继续，不阻塞首个视觉安全闭环。
-2. P8 并行将 apartment 专用 voxel/box 原型泛化为场景无关的几何基线，
-   再设计可替换语义前端；保留 voxel/mesh 对照，不以完整语义模型复现
-   阻塞 P7。
+1. P8 按用户决定完成并收口，保留现有产物和地板拼接等限制，不追加修补。
+2. P10 固定资产的原有/自动碰撞 CPU/CUDA/native 对照已完成，按顺序继续
+   版本化缓存与性能矩阵，不重开 P7 已收口场景验收或 P8 地板修补。
 3. 固定视觉资产和评估协议，对比手工/自动碰撞、视觉依赖及未见布局/场景。
 4. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
 
 ## 14. 更新记录
+
+- 2026-11-25：启动 P10 可选 3DGS 预处理缓存，独立模块加默认关闭的资产配置
+  字段，不改 play/demo、manifest schema、训练或物理加载接口。基于 source
+  内容/导入参数/schema 校验失效，损坏重建、原子写入和失败回退均已有定向
+  测试；真实两场景读入计时与 exact-array 对照已完成，整体检查仍在验证。
+
+- 2026-11-25：核验用户完成的 P10 apartment CUDA/native 报告，输入及协议
+  一致。两组 CUDA 均跑满三个种子，自动方案吞吐近似但平均跟踪误差较大；
+  两组 seed 42 的 LS_ITERATIONS 警告原样保留。native 两组均 ready、500
+  submissions、overflow=0。固定资产对照子任务完成，P10 整体仍进行中。
+
+- 2026-11-24：用户明确将 P8 标记完成并转下一任务。更新当前主线为 P10
+  固定资产替换 benchmark。新增通用实验准备工具，显式规范化共同障碍的位姿、
+  形状、接触与外观参数，冻结副本并记录输入/输出及生成报告哈希；不覆盖
+  apartment 原始碰撞、manifest 或 P8 通用产物，不修改 play/demo。
+  两变体三种子 CPU 与独立落体已完成，9 项定向测试、make check、make docs
+  通过；CUDA/native 尚待桌面运行，不提前标记 P10 完成。
+
+- 2026-11-24：按用户不手工分类、不能判断则 unknown 的要求收口 P8 工程链路。
+  实际 SceneSplat、unknown 保留、257-geom 几何回退、原始/过滤语义同预算
+  CPU/CUDA/native 对照均完成。42 项定向测试、make check、make docs 通过，
+  play/demo 零差异。负结论与 LS_ITERATIONS 警告保留，独立准确率未测。
+  证据见 [实际语义验收记录](validation/p8-scenesplat-artanim-2026-11-24.md)。
+
+- 2026-11-21：核验用户完成的 P8 CUDA/native 输出。CUDA policy 报告沿用相同
+  checkpoint、motion、manifest 和 seeds，五表示法为 76.10--80.20 control SPS，
+  是 CPU 的 2.88--3.49 倍；SplatTransform 两表示的成功率由 CPU 1/3 变为 CUDA
+  0/3，明确记录而不假设跨设备轨迹等价。native 3DGS 五表示均 ready 并完成
+  500 次提交，actual realtime 0.498--0.571，24.90--28.54 submissions/s，无
+  overflow bit。GPU 路径 SplatTransform GLB 与 llvmpipe 输出字节一致；补录的
+  Vulkan GPU 0 日志显示 voxelization 0.036 s、总耗时 0.714 s、峰值 GPU
+  13.6 MB。``nvidia-smi`` 已归档主机唯一 NVIDIA GPU 为 RTX 3060 12 GiB、
+  driver 580.82.07；``--list-gpus`` 已归档 adapter 0/1 为 RTX 3060、adapter 2
+  为 llvmpipe。运行显式选择 ``--gpu 0``，NVIDIA/SplatTransform 性能证据闭环。
+- 2026-11-21：完成 P8 CPU 策略级联合评价协议。新增本地 G1 collision-policy
+  benchmark、三种子 Artanim 五表示法报告及 native 3DGS companion benchmark；
+  报告关闭 auto-reset 以保留真实终止步，并将 Warp overflow 解码为 bit flag。
+  平面控制成功率 1.0，43 primitives、heightfield+residual、SplatTransform
+  component hull/V-HACD 均为 0.333；后四者多在 401--428 步因末端/anchor 偏差
+  终止。其 CUDA/native 补充结果见上一条更新。
+- 2026-11-21：完成 P8 内部表示法与固定预算阶段。新增 exact occupancy、TSDF
+  marching tetrahedra、拓扑修复/法线统一、coarse manifold remeshing、
+  heightfield+residual primitive，以及 Artanim crop 的距离/拓扑/生成时间和
+  统一 CPU contact 对照。新增 ``--max-primitives``、semantic/point importance
+  稳定排序及 matched-budget 消融工具；synthetic 2-geom 人工真值显示层间误占
+  由 1 降为 0，同时保留被舍弃表面的误差代价。SceneSplat 官方预处理已验证
+  659,010 行对齐，但 checkpoint 受 Hugging Face 条款/登录限制且本环境无 CUDA；
+  SplatTransform 固定官方 commit、安装 3.12.0 并通过 llvmpipe 实际生成
+  faces/smooth collision GLB；smooth 为 2,227 vertices/4,406 faces 且闭合，
+  但凹 GLB 不可直接作为 MuJoCo 单 mesh geom。SceneSplat 实际推理和视觉/策略
+  联合评价不作完成声明；共享 ``play.py``/``demo.py`` 保持零 diff。
+- 2026-11-21：补齐语义特征解码边界。新增 aligned ``.npy``/tensor-only ``.pt``
+  feature 与 class embedding 的确定性 cosine decoder，分块避免一次分配完整
+  ``N×C``，以 best similarity/top-two margin 把低置信度保留为 unknown，并输出
+  labels、confidence NPZ 与输入/输出 hash。synthetic 顺序、阈值、unknown 与非法
+  shape/ID 回归通过；这仍不替代 gated SceneSplat checkpoint 的真实推理和标签评估。
+- 2026-11-21：补齐 SplatTransform→MuJoCo 可执行外部对照。新增 GLB/OBJ 的
+  component hull 与 V-HACD 多凸 MJCF 转换、volume/source-distance/free-probe
+  报告，以及默认拒绝、显式 opt-in 的 bundle-local mesh benchmark。Artanim
+  smooth GLB 的 12-component hull 与 64-piece V-HACD 体积膨胀为 1.442×/1.172×，
+  21 个 spawn-column free probe 均为 0 false occupied；同一 3×3 probe 单轮为
+  27,456/20,689 SPS。关闭 async 后两次 V-HACD sampled hashes 一致。该阶段没有
+  修改 ``play.py``/``demo.py``，也不把稀疏 free probe 当全场景真值。
+- 2026-11-21：完成 P8 自动碰撞生成 MVP，但按用户要求不作完整 P8 收口。MVP
+  核心范围包括确定性通用
+  primitive 生成、provenance/source mapping、known-free 与 semantic sidecar、
+  有限平面/free-side 约束、synthetic 真值、Artanim 真实资产距离/编译证据及
+  rendering-independent CPU collision benchmark。该记录描述当时状态；后续
+  已补内部 TSDF/mesh/heightfield，但外部语义模型、SplatTransform/SDF 和任务
+  联合评价继续作为完整 P8 未完成项；未修改共享
+  ``play.py``/``demo.py``。
+- 2026-11-21：增加独立 evaluation NPZ 和统一几何统计。reference surface 点
+  输出最近 proxy surface mean/p95/max 距离，free 点输出误占数量/比例；输入不
+  参与生成，避免约束点自证。同步补齐 grid、连通分量、映射覆盖和简化统计，
+  synthetic 五类结构的首版 ground-truth 项按当前 primitive 基线范围完成。
+- 2026-11-21：增加可替换 semantic frontend 的 sidecar 契约。每个原始 PLY
+  vertex 对齐一个整数标签；voxel 多数票后按标签分组 merge，其他标签 occupied
+  voxel 作为边界，unknown 保留为 geometry residual。NPZ/report 保存输出标签与
+  输入哈希。当前只完成接线和 synthetic 边界回归，SceneSplat 小区域标签质量
+  评估仍未完成。
+- 2026-11-21：新增 opt-in covariance-aware PCA 与最大 Gaussian scale 过滤。
+  复用 Graphdeco scale/rotation 定义构造 world-space covariance，只在显式启用时
+  参与 primitive 分类；默认 center-only 路径无额外内存和输出变化。Artanim
+  0.2 m scale 上限对照生成 163 box + 9 cylinder 并通过 MuJoCo 编译，质量优劣
+  保持待后续统一指标与接触实验判断。
+- 2026-11-21：在显式 known-free 负证据上增加 opt-in planar slab 单侧锚定。
+  footprint 内、指定距离内的 free 点对局部法向两侧投票；达到一致率后将拟合
+  平面固定为自由面，并把配置厚度仅向相反侧延伸。上下自由侧及双侧歧义
+  synthetic 回归通过；缺少证据时不猜测，默认输出不变。
+- 2026-11-21：新增显式 known-free 点 sidecar 约束，不从 PLY 未占据区域猜测
+  自由空间。merge box 和 auto primitive 均不得覆盖网格内约束点，冲突输入失败；
+  free-aware guillotine score 在保留 void 的同时控制 box 数。新增桌底/桌腿、坑洞
+  和双层结构 synthetic 回归，默认路径保持字节兼容。该接口为相机 ray carving、
+  人工标注或 synthetic truth 提供通用接入点；实体侧推断和 slab 单侧厚度锚定
+  仍未完成。
+- 2026-11-20：为 center-only box merge 增加 opt-in 平面残差约束。它只在候选
+  占据 voxel 呈近似平面时限制 voxel center 到最佳拟合平面的最大绝对距离，
+  防止楼梯或弯折表面被粗 fill 条件合并为 ramp-like 大 box；默认关闭以保持
+  既有字节输出。synthetic 门洞和三阶楼梯回归通过；完整自由侧厚度锚定以及
+  桌腿、坑洞、多层结构真值仍是下一步。
+- 2026-11-20：在保持默认 box-only 输出不变的前提下新增 opt-in auto primitive
+  模式。每个 merged voxel candidate 使用 PCA 特征分类，再以表面误差验证
+  oriented box、sphere、cylinder 或 capsule；round fit 必须比 oriented-box
+  基线至少降低 30% 误差。平面支持稀疏或含大孔洞、误差超阈值和点数不足均
+  回退 bounded axis-aligned box。新增逐 primitive 对照误差 report 与 CSR
+  source-ID mapping；Studio 保守 auto 得到 183 box + 7 cylinder，这 7 个候选
+  的相对改善为 33%--49%，尚待 native overlay 人工质量检查和参数标定。
+- 2026-11-20：修复提高 round-vs-box 相对改善阈值时小候选可能被二次体积过滤
+  的问题；绝对 round 拟合通过但相对收益不足时保留同一 candidate 的 oriented
+  box，并在 report 中记录 rejected round 类型、误差和相对改善。Studio 的
+  30%/40%/50% sweep 现在均保持 190 个 primitive，分别为 7/4/0 个 cylinder。
+- 2026-11-20：为 auto primitive 增加 opt-in 按类型着色的 MJCF 诊断输出，便于
+  在 Native Viewer 中定位 7 个 cylinder 并对照 3DGS 判断是否误判；该选项只改
+  `rgba`，不作为几何或接触质量已验收的证据。
+- 2026-11-20：启动 P8 通用几何基线。新增场景无关 center-only PLY→voxel/
+  axis-aligned box→collision-only MJCF 工具，输出独立 SHA-256 report 与确定性
+  box→source Gaussian ID NPZ，不修改 manifest v1、训练、渲染或物理加载接口。
+  synthetic 门洞/source-ID/floor/grid-limit 回归与既有 apartment 合并回归共
+  8 项通过；
+  apartment 真实资产复跑得到 20,468 个占据 voxel、89 个合并候选和 36 个
+  surface box。有限平面、第二场景质量、语义与接触性能保持未完成。
 
 - 2026-11-17：明确深度来源为 3DGS 和可视 mesh，隐藏 group 3 仅用于物理和
   教师。Vision-Data 使用任务侧原生直接射线，避免共享 RenderContext 合并污染，

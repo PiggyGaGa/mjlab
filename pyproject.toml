@@ -159,6 +159,7 @@ ignore = ["B011"]
 
 [tool.pyright]
 pythonVersion = "3.10"
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "artifacts"]
 venvPath = "."
 venv = ".venv"
 ignore = ["./typings", "./src/mjlab/utils/lab_api", "./docs"]

@@ -60,10 +60,126 @@ This creates a foundation for several robotics directions:
 - task-aware scene simplification that balances contact quality, visual fidelity,
   training throughput, and memory use.
 
+Optional repeated-load preprocessing caches are enabled per asset with
+``GaussianSplatAssetCfg(path="scene.ply", cache_dir="artifacts/splat-cache")``.
+They are off by default, invalidate on source content or import/transform changes,
+and rebuild corrupt entries with atomic writes. Measure CPU loading separately with
+``uv run scripts/tools/benchmark_gaussian_splat_loading.py scene.ply report.json
+--cache-dir artifacts/splat-cache``. This does not cache GPU BVHs or increase
+rendering FPS by itself.
+
 The current milestone provides native visualization and sensor integration plus a
 collision-only MJCF input for externally prepared primitives, convex meshes, and
-heightfields. Automatic collision-proxy generation from 3DGS remains planned. Run
-the pretrained G1 tracking demo with aligned visual and collision assets:
+heightfields. A deterministic center-only baseline can also voxelize a Graphdeco
+PLY and merge occupied cells into collision boxes:
+
+```bash
+uv run scripts/tools/generate_3dgs_collision.py \
+  /path/to/splats.ply /path/to/collision.xml \
+  --report /path/to/collision_report.json --floor-z 0 \
+  --primitive-mode auto
+```
+
+The tool writes a hashed report and a compressed mapping from each retained box
+or fitted primitive to the original PLY vertex IDs. ``auto`` uses local covariance
+and surface-fit error to select oriented boxes, spheres, cylinders, or capsules;
+failed fits fall back to the original bounded axis-aligned boxes. The default
+``--primitive-mode boxes`` preserves the original baseline. Round primitives must
+also reduce normalized surface error by 30% relative to an oriented-box fit; tune
+this conservative gate with ``--min-round-error-improvement``. For stepped or bent
+surfaces, ``--max-planar-merge-residual 0.04`` prevents an approximately planar
+merged candidate from spanning more than 4 cm away from its best-fit plane. This
+scale-dependent guard is opt-in so existing outputs remain unchanged. The tool assumes the
+input is already right-handed, Z-up, and measured in metres; it does not infer
+semantic structure or guarantee contact-quality geometry, so inspect the result
+before training. When camera rays, manual annotations, or another trusted source
+provide known free space, pass an ``(N, 3)`` world-coordinate NumPy array with
+``--known-free-points /path/to/free_points.npy``. Merging and automatic primitive
+fitting will not cover those samples; conflicting occupied/free voxels are rejected.
+The PLY alone cannot supply this negative evidence. In auto mode, combine it with
+``--planar-slab-thickness 0.1`` to place a planar patch's fitted surface on the
+known-free face and extend the requested thickness only toward the inferred solid
+side. Ambiguous or missing free-side evidence retains the symmetric legacy fit.
+For a covariance-aware comparison, ``--use-gaussian-covariance`` adds each
+Graphdeco splat covariance to the candidate's center covariance before PCA;
+``--max-gaussian-scale`` can remove extreme scale outliers first. Both are opt-in.
+For fragmented horizontal patches, add ``--merge-horizontal-surfaces`` in auto
+mode. This aligns nearby existing box-top levels and retiles the exact union of
+their voxel-candidate footprints into finite slabs. It preserves holes in that
+union, distinct height groups, semantic boundaries and explicit known-free
+constraints. It is not global floor recognition: uncertain patches and ramps stay
+unchanged, and existing unseen holes cannot be inferred from source points alone.
+``--horizontal-level-tolerance`` (0.04 m), ``--horizontal-surface-residual``
+(0.06 m), ``--horizontal-slab-thickness`` (0.1 m), and
+``--horizontal-max-tilt-degrees`` (5 degrees) control this opt-in experiment.
+An integer ``(N,)`` ``--semantic-labels`` NumPy sidecar can provide a replaceable
+per-vertex frontend: voxel labels use deterministic majority voting, merging does
+not cross another label's occupied cells, and the configured unknown label remains
+as a geometric residual group. In auto mode, ``--max-primitives`` imposes a
+deterministic geom budget; ``--semantic-priorities`` and ``--point-importance``
+rank candidates within that budget while retaining exact source-ID mappings.
+``scripts/tools/decode_3dgs_semantic_features.py`` converts aligned SceneSplat-style
+language features and user-supplied class embeddings into this integer sidecar using
+blocked cosine similarity. Similarity and top-two margin thresholds retain uncertain
+rows as ``unknown``; the report hashes every input and records confidence statistics.
+It is a decoder, not a bundled SceneSplat checkpoint or a claim of label accuracy.
+For automatic use with uncertain labels,
+``uv run scripts/tools/generate_3dgs_collision_guarded.py scene.ply labels.npy output/``
+always generates a geometry baseline and falls back to it when unknown labels
+exceed 50%. Otherwise it accepts semantic grouping only if source mapping coverage
+does not decrease and source-distance mean/p95/max do not increase by more than 5%.
+The thresholds are configurable engineering guards, not calibrated confidence or
+a safety guarantee. Unknown categories never imply free space; the selected proxy
+and rejection reasons are recorded in ``output/guard_report.json``.
+An independent ``--evaluation-points`` NPZ can report reference-surface distance
+and false occupied free-space probes without affecting generation.
+``--evaluate-source-surface`` adds an input-coverage diagnostic. Compare CPU
+collision-only cost with identical probes using
+``uv run scripts/tools/benchmark_collision_mjcf.py ... --output report.json``;
+the benchmark reports physics SPS, contacts, constraints, and solver iterations,
+and does not measure 3DGS rendering. It rejects file assets by default; the explicit
+``--allow-file-assets`` mode accepts only bundle-local mesh files and hashes every
+dependency.
+For an explicitly matched-budget geometry/semantic experiment, run
+``scripts/tools/compare_3dgs_collision_semantics.py`` with one label per original
+PLY vertex, a priority JSON file, and independent evaluation probes. It generates
+both MJCFs and records generation time, geometric/free-space error, physics SPS,
+contacts, constraints, and solver iterations under identical probes. Its report
+leaves visual throughput unset unless that separate CUDA-visible experiment is
+actually run.
+
+``scripts/tools/compare_3dgs_collision_representations.py`` provides an offline
+comparison of voxel primitives, exact occupancy surfaces, TSDF marching-tetrahedra
+surfaces, coarse manifold remeshing, and lowest-surface heightfield plus residual
+primitives. It writes topology diagnostics and deterministic OBJ/MJCF artifacts.
+The OBJ files are reconstruction baselines: MuJoCo collision for a single concave
+mesh uses its convex hull, so a whole room OBJ must not be loaded as one collision
+geom without convex decomposition.
+``scripts/tools/convert_collision_mesh_to_mjcf.py`` converts an external triangle
+mesh either to one convex hull per connected component or to deterministic V-HACD
+pieces, exports a bundle-local MJCF, and reports volume inflation, source-to-hull
+distance, compile counts, and optional independent free-space probes.
+For a collision replacement experiment with extra common obstacles, first use
+``scripts/tools/prepare_collision_comparison.py reference.xml automatic.xml
+scene.ply output/ --common-geoms obstacle_a obstacle_b``. This freezes independent
+primitive copies with identical resolved common obstacles; it does not change the
+source scene. Optional ``--automatic-report`` binds the automatic MJCF and visual
+PLY to their generation hashes. See
+[the P10 protocol](requirements/mjlab-3dgs-p10-benchmarks.md) for the apartment setup.
+
+``scripts/tools/benchmark_g1_collision_policy.py`` consumes a JSON variant manifest
+and evaluates every proxy with the same local G1 checkpoint, motion, seeds, and
+finite horizon. Its report keeps geometry evidence beside tracking error,
+termination reason, contacts, constraints, solver flags, and policy-plus-physics
+throughput. It disables auto-reset so the terminal step is measurable and does not
+modify ``play`` or ``demo``. On a CUDA-visible desktop, the companion
+``scripts/tools/benchmark_native_3dgs_collision_policy.py`` runs the same manifest
+through the native 3DGS viewer and records actual realtime and viewer submission
+rate; submissions are not display refresh FPS.
+Add ``--debug-color-by-type`` in auto mode to render boxes as translucent green,
+spheres as magenta, cylinders as orange, and capsules as blue;
+this changes only MJCF appearance. Run the pretrained G1 tracking demo with aligned
+visual and collision assets:
 
 ```bash
 uv run demo \

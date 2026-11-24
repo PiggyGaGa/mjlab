@@ -12,6 +12,12 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
 
+from mjlab.asset_zoo.gaussian_collision import (
+  VoxelBoxConfig,
+)
+from mjlab.asset_zoo.gaussian_collision import (
+  merge_surface_boxes as merge_voxel_boxes,
+)
 from mjlab.scene.gaussian_splat import _read_ply_vertices
 
 VOXEL_SIZE = 0.1
@@ -32,46 +38,13 @@ def merge_surface_boxes(occupied: np.ndarray) -> list[tuple[np.ndarray, np.ndarr
   remains covered. Added cells must be within MAX_SURFACE_EXPANSION of the source
   occupancy; the density threshold prevents bounding whole sparse structures.
   """
-  distance = cast(np.ndarray, ndimage.distance_transform_edt(~occupied)) * VOXEL_SIZE
-  boxes: list[tuple[np.ndarray, np.ndarray]] = []
-
-  def partition(indices: np.ndarray) -> None:
-    if not len(indices):
-      return
-    lower = indices.min(axis=0)
-    upper = indices.max(axis=0) + 1
-    region = tuple(slice(int(a), int(b)) for a, b in zip(lower, upper, strict=True))
-    volume = int(np.prod(upper - lower))
-    if (
-      len(indices) / volume >= MIN_BOX_FILL
-      and distance[region].max() <= MAX_SURFACE_EXPANSION + 1e-9
-    ):
-      boxes.append((lower, upper))
-      return
-
-    # Prefer cuts that separate sheets rather than cutting their longest sides.
-    best_score: tuple[int, int] | None = None
-    best_axis = best_cut = 0
-    for axis in range(3):
-      for cut in range(int(lower[axis]) + 1, int(upper[axis])):
-        left = indices[indices[:, axis] < cut]
-        right = indices[indices[:, axis] >= cut]
-        if not len(left) or not len(right):
-          continue
-        child_volume = int(
-          np.prod(left.max(axis=0) - left.min(axis=0) + 1)
-          + np.prod(right.max(axis=0) - right.min(axis=0) + 1)
-        )
-        score = (child_volume, abs(len(left) - len(right)))
-        if best_score is None or score < best_score:
-          best_score = score
-          best_axis, best_cut = axis, cut
-    assert best_score is not None
-    partition(indices[indices[:, best_axis] < best_cut])
-    partition(indices[indices[:, best_axis] >= best_cut])
-
-  partition(np.argwhere(occupied))
-  return boxes
+  config = VoxelBoxConfig(
+    voxel_size=VOXEL_SIZE,
+    min_box_fill=MIN_BOX_FILL,
+    max_surface_expansion=MAX_SURFACE_EXPANSION,
+    min_box_volume=MIN_SURFACE_BOX_VOLUME,
+  )
+  return merge_voxel_boxes(occupied, config)
 
 
 def prune_small_surface_boxes(

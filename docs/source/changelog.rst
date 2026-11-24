@@ -8,6 +8,107 @@ Upcoming version (not yet released)
 Added
 ^^^^^
 
+- Added opt-in, versioned NPZ caching for normalized Gaussian assets through
+  ``GaussianSplatAssetCfg.cache_dir``. Full source-content and configuration keys,
+  payload validation, atomic replacement and uncached write-failure fallback keep
+  stale or partial entries out of normal loads. Caching remains disabled by default;
+  a standalone loading benchmark checks exact cached/uncached array equivalence.
+
+- Added primitive collision comparison preparation with explicit common-obstacle
+  normalization, optional generation-provenance checks and hashed experiment
+  copies. Original scene assets and existing play/demo behavior remain unchanged.
+
+- Added opt-in horizontal collision-surface consolidation. Nearby supported box
+  tops can share a level and finite slabs while retaining candidate-footprint
+  holes, semantic boundaries, known-free constraints and complete source mappings.
+  Existing generation and play/demo defaults remain unchanged.
+
+- Added a standalone 3DGS semantic inspection exporter with RGB/raw/gated
+  projections, a class-color legend, and reproducible prediction-blind manual
+  annotation samples. Existing annotation CSV files are never overwritten.
+
+- Added independent semantic annotation scoring with coordinate/source-ID checks,
+  per-class precision, recall, IoU and explicit abstention coverage. Missing human
+  labels produce a pending report with null quality metrics, not estimated truth.
+
+- Added an opt-in guarded collision workflow that falls back to geometry-only
+  generation when semantic unknown coverage is excessive or source-geometry
+  coverage/error diagnostics regress. It records the selection without changing
+  labels, existing generator defaults, or play/demo behavior.
+
+- Added a deterministic, scene-independent center-only 3DGS collision baseline.
+  The command-line tool filters and voxelizes Graphdeco PLY centers, merges bounded
+  occupied regions, and writes a hashed generation report plus primitive-to-source-
+  Gaussian ID mappings. An explicit automatic mode fits oriented boxes, spheres,
+  cylinders, or capsules from local covariance and comparative surface error. Round
+  fits must improve on an oriented-box baseline by a configurable margin, with the
+  original bounded axis-aligned boxes as a safe fallback. Box-only mode remains the
+  default; existing scene manifests and hand-authored collision assets remain
+  unchanged. An explicit diagnostic option color-codes fitted primitive types for
+  Native Viewer inspection without changing collision properties.
+
+- Added an opt-in planar merge residual guard to the center-only collision baseline.
+  It prevents approximately planar voxel candidates from merging across bent or
+  stepped surfaces, with synthetic doorway and three-step staircase regressions.
+  Existing output remains unchanged unless the threshold is explicitly configured.
+
+- Added optional known-free world-space point constraints to 3DGS collision
+  generation. Box partitioning prioritizes isolating constrained voids, and automatic
+  primitive fits that intrude into them fall back to bounded boxes. Synthetic table
+  underside, pit, and multilevel regressions cover the new path; no free space is
+  inferred from the PLY alone.
+
+- Added opt-in free-side anchoring for planar collision slabs. When nearby
+  known-free samples agree on one side, the fitted plane becomes the free face and
+  configured thickness extends only toward the opposite side. Ambiguous evidence
+  retains the symmetric default fit.
+
+- Added an opt-in covariance-aware primitive baseline and maximum Gaussian-scale
+  filter. Graphdeco scales and rotations can contribute their covariance to local
+  PCA without changing the default center-only path.
+
+- Added a model-independent semantic label sidecar for collision generation.
+  Deterministic voxel-majority labels prevent merges across occupied semantic
+  boundaries, unknown labels remain geometry-only residuals, and output labels are
+  stored beside source-Gaussian mappings.
+
+- Added independent collision evaluation probes and expanded generation statistics.
+  An optional NPZ reports reference-surface distance and false occupied free space;
+  reports also include grid, component, simplification, mapping, and representation
+  counts.
+
+- Added a rendering-independent primitive collision benchmark with identical
+  falling-sphere probes. It reports compile time, CPU physics throughput, contacts,
+  active constraints, solver iterations, model counts, and input hashes without
+  changing the shared play or demo paths.
+
+- Added deterministic occupancy-surface, TSDF marching-tetrahedra, coarse manifold
+  remeshing, and single-valued heightfield reconstruction baselines. A representation
+  comparison tool exports OBJ/MJCF artifacts and reports topology, surface error,
+  generation time, heightfield ambiguity, and MuJoCo compile diagnostics. Inline
+  heightfields are also supported by the independent collision benchmark.
+
+- Added fixed-budget primitive selection with semantic and per-point task priorities,
+  plus a matched-budget ablation tool that jointly records independent geometry
+  probes and rendering-independent CPU contact performance. Existing unbudgeted
+  generation remains unchanged.
+
+- Added conversion of external triangle collision meshes to component-wise hulls or
+  deterministic V-HACD pieces, with volume, surface-distance, free-space, compile, and
+  dependency-hash diagnostics. The collision benchmark can opt in to bundle-local
+  file-backed meshes while continuing to reject them by default.
+
+- Added a deterministic blocked-cosine decoder from aligned SceneSplat-style language
+  features and class embeddings to integer collision labels. Similarity and margin
+  thresholds preserve uncertain rows as unknown and emit hashed confidence reports;
+  no model checkpoint or class encoder is bundled.
+
+- Added manifest-driven G1 collision-policy evaluation. The local benchmark keeps
+  geometry evidence, tracking errors, termination reasons, contact/solver metrics,
+  overflow flags, and policy-plus-physics throughput in one report across fixed
+  seeds. A separate native 3DGS viewer benchmark records CUDA desktop actual
+  realtime without changing the existing play or demo scripts.
+
 - Added structured pelvis contact events, termination reasons, and camera-source
   checks to safe-velocity acceptance reports. Current contact flags remain active
   even when force history is zero, and terminated depth-stop runs cannot pass.

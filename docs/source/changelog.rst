@@ -5,8 +5,34 @@ Changelog
 Upcoming version (not yet released)
 -----------------------------------
 
+Fixed
+^^^^^
+
+- Default pytest discovery now targets the repository's ``tests`` directory,
+  avoiding accidental collection of third-party tests in experiment artifacts.
+
+Changed
+^^^^^^^
+
+- Custom MuJoCo release wheel selection and its update helper now target only
+  CPython 3.13 on Linux x86_64. Python 3.12 uses the official MuJoCo dependency
+  without the custom native 3DGS viewer.
+
 Added
 ^^^^^
+
+- Renderer benchmark reports now include installed MuJoCo/MuJoCo-Warp file
+  fingerprints. A separate matched-capture comparison checks input provenance and
+  actual poses before reporting RGB/depth differences against archived frames.
+
+- Added a standalone 3DGS throughput experiment with warmup, repeated physics,
+  sensing, actor and PPO measurements, reusing the existing throughput helpers.
+  An optional camera-only control retains manifest collision and RGB/depth capture
+  while disabling Gaussian assets; reports include collision file hashes.
+  Optional per-asset splat caps and reset-view captures support budget experiments
+  without changing source assets or timing snapshot I/O.
+  Static capture mode accepts named manifest spawns and yaw offsets for visual
+  comparisons without constructing a PPO runner or running updates.
 
 - Added opt-in, versioned NPZ caching for normalized Gaussian assets through
   ``GaussianSplatAssetCfg.cache_dir``. Full source-content and configuration keys,

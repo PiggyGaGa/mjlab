@@ -50,6 +50,18 @@ uv run python scripts/benchmarks/measure_throughput.py \
 
 ## Configuration
 
+The standalone 3DGS experiments are separate from the nightly training workflow:
+
+- `measure_3dgs_throughput.py` measures repeated full/camera-only workloads or
+  captures fixed views without PPO updates, using an explicit scene manifest.
+- `gaussian_build_identity.py` fingerprints installed renderer files for reports.
+- `compare_3dgs_captures.py` checks matched capture inputs/poses before comparing
+  RGB and raw depth. It does not decide task quality.
+
+See [the Gaussian guide](../../docs/source/sensors/gaussian_splats.rst) for commands,
+capture formats and timing limits. These tools do not require local experiment
+launchers under the ignored `artifacts/` directory or publish nightly results.
+
 Environment variables for `nightly_train.sh`:
 
 - `CUDA_DEVICE` - GPU device to use (default: 0)

@@ -17,7 +17,7 @@
 | P6 | YAM Vision → G1 视觉训练适配 | **完成（工程接口与 P7-ready 验收范围）** | 视觉收益、多种子消融和更大规模训练转入 P7/P10/P11 |
 | P7 | 3DGS 安全感知速度跟踪 | 规则深度安全层及 36 组场景验证完成，按当前范围收口 | 学习式感知安全层（另行开展） |
 | P8 | 自动碰撞生成 | **完成，按用户决定收口** | 地板拼接、独立语义准确率与安全保证作为已知限制，不再追加修补 |
-| P10 | 性能与发布 | **进行中：固定资产对照完成，缓存验证中** | 缓存回归验收、传感/训练吞吐矩阵及完整测试 |
+| P10 | 性能与发布 | **进行中：功能收尾与完整CPU测试完成** | GPU全套、Viser正式覆盖及剩余性能验收 |
 | P11 | 论文实验与写作 | 持续进行 | 基线、消融和论文草稿 |
 
 “基础完成”表示核心链路已经实现，但扩展能力和最终验收仍存在
@@ -172,8 +172,18 @@ P7 与 P8 互不作为启动前置条件。P6 视觉链路已完成，P7 当前�
 P3、P4、P7 已按当前范围收口，P5、P6 已完成。2026-11-24 用户明确将 P8
 标记完成，地板拼接等已知限制归档，不再作为当前修补主线。当前推进 P10：
 固定 apartment 视觉资产与既有 G1 checkpoint/motion 的原有/通用自动碰撞
-CPU/CUDA/native 对照已完成并于 2026-11-25 核验；当前实现并验证默认关闭的
-版本化预处理缓存，随后为传感/训练吞吐矩阵及完整测试。原有模型的额外可见
+CPU/CUDA/native 对照已完成并于 2026-11-25 核验；默认关闭的版本化预处理
+缓存也已通过回归、make check 与文档验收。GPU 四格管线校准、重复计时及
+Gaussian on/off 匹配对照及八组 splat 预算扫描均已完成审计。5万/10万视觉缺失
+明显，20万的16次多视角采集已核验，但仍有墙面斑点和深度空洞，不修改默认值；
+25万/30万与全量的24次同视角采集也已核验。用户报告已在 MuJoCo 源码修复
+感知耗时，旧计时保留为历史基线。当前安装构建已识别并完成全量四格/八视角
+复测：图像一致，Warp 8ffab7a的相机计时仍接近历史量级。native viewer另行
+三轮复测已完成，Actual RT中位数约1.03；新版Warp优化尚未安装验收。后续扩展
+吞吐矩阵及完整测试，保持两条性能路径的证据区分，不继续推动裁点。
+2026-11-26功能收尾已完成完整CPU套件（1401通过、13项CUDA条件skip）、
+make check和文档检查；GPU全套与尚未覆盖的正式性能范围仍待验收。
+原有模型的额外可见
 柱体在两组实验副本中保持一致，
 不得悄悄改变场景来宣称碰撞生成收益；原始 P7/P8 资产保持不变。P6 复用
 YAM Vision 的
@@ -415,6 +425,37 @@ CameraSensor、标准化 depth、二维 observation group、Spatial-Softmax CNN
 
 ### H. 当前验证证据
 
+- [x] 2026-11-26 功能收尾完整CPU套件1401 passed、13 CUDA-gated skipped，
+  0失败；make check通过，docs成功（1条在线引用索引warning）。13项GPU验收
+  和正式Viser等性能范围仍开放，见 `validation/p10-closeout-2026-11-26.md`。
+- [x] 2026-11-26 native-retest-C6pmr45y 三轮通过，六次renderer ready/overflow=0，
+  前后构建及输入hash一致；reference/automatic的Actual RT中位数为1.02978/
+  1.02834，略高于实时。此为完整策略/物理/viewer负载，不是显示FPS或Warp相机
+  提速证据。详见 `validation/p10-native-retest-2026-11-26.md`。
+- [x] 2026-11-25 核验已安装MuJoCo的11个原生文件与远程33ef7f10 wheel一致，
+  记录实际映射库及MuJoCo/Warp运行文件指纹。用户选择先测当前Warp 8ffab7a。
+  7项CPU回归、make check、docs及启动命令模拟检查通过；四格计时和八视角
+  GPU结果已核验，图像一致，当前Warp的相机计时未见明显下降。
+  见 `validation/p10-current-full-2026-11-25.md`。
+- [x] 2026-11-25 refinement 的24份报告通过，三档 qpos/输入一致，30万最差
+  参考有效深度损失0.293%、共同有效深度 MAE 最高0.851cm；仅静态图像比较，
+  非修复后性能验收。见 `validation/p10-multiview-refinement-2026-11-25.md`。
+- [x] 2026-11-25 多视角16份报告通过、逐对 qpos/输入一致；20万最差视角
+  丢失4.40%的参考有效深度，另一视角共同有效像素中7.78%误差大于0.1m。
+  采集协议完成但不认定质量等效，详见 `validation/p10-multiview-2026-11-25.md`。
+- [x] 2026-11-25 splat 预算八组通过，加载数量、输入 hash、三轮中位数和与
+  同 world 数全量参考的 qpos 一致性已核验。5万/10万出现严重视觉缺失，20万
+  仅为多视角候选；详见 `validation/p10-splat-budgets-2026-11-25.md`。
+- [x] 2026-11-25 P10 相机匹配对照八组通过，报告中位数和输入哈希经重算，
+  同配置两臂碰撞/相机/PPO 一致，固定状态感知增量为
+  12.271/23.511/29.579/89.094 ms/batch。详见
+  `mjlab-3dgs-p10-vision-matrix.md`；该子实验完成，完整性能矩阵仍未完成。
+- [x] 2026-11-25 P10 预处理缓存完成验收：定向回归 `37 passed, 3 deselected`，
+  `make check` 与 `make docs` 通过；使用既有环境且禁用依赖同步，未验证新 wheel
+  的运行行为。两场景缓存数组与未缓存结果完全一致，详见
+  `validation/p10-splat-cache-2026-11-25.md`。四组 GPU 视觉链路校准已核验全部通过，
+  详见 `mjlab-3dgs-p10-vision-matrix.md`；不计作正式性能矩阵验收。
+  共享 play/demo 及其配置测试保持零差异。
 - [x] 2026-11-21 P8 MVP 验证（非完整 P8 验收）：``make check`` 全绿，碰撞生成与 apartment
   定向回归 ``24 passed``，``make docs`` 成功；共享 ``play.py``、``demo.py`` 及其
   配置测试保持零差异。完整 ``make test`` 首次被系统 ROS pytest plugin 缺失
@@ -1332,10 +1373,10 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
   native 两组均 ready、500 submissions、overflow=0，actual RT 0.770/0.760。
   不宣称自动碰撞收益，不覆盖原有资产；P10 其它项目保持未完成。
 
-- [ ] **后期优化：**实现版本化 `splats.npz` 预处理缓存、原子写入，
+- [x] 实现版本化 `splats.npz` 预处理缓存、原子写入，
   并在源 PLY、导入参数、transform 或 schema 变化时自动失效。
   2026-11-25 已实现可选 cache_dir、内容/参数 key、NPZ 数据校验和原子替换，
-  正在完成回归、make check 与文档验收；未配置缓存时不做哈希或缓存 I/O。
+  37 项定向回归、make check 与文档验收通过；未配置缓存时不做哈希或缓存 I/O。
   真实 apartment/Artanim 已测未缓存、首次建缓存与热缓存三阶段，输出数组
   完全相同。证据见 [缓存验证](validation/p10-splat-cache-2026-11-25.md)。
 - [ ] 为无 3DGS、Viser-only、MJWarp camera 和视觉训练分别建立正式
@@ -1343,10 +1384,23 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 - [ ] 记录初始化、PLY 解析、BVH、浏览器上传、physics、policy 和
   rendering 时间。
 - [ ] 建立目标 GPU、splat 数、world 数、分辨率和目标吞吐矩阵。
+  初轮复用既有 vision smoke，apartment、seed 42、1/4 worlds、
+  64x48/128x96 四格已运行并核验全部通过。每格主循环 12 steps x 1 PPO update，
+  另有保存恢复后的 12 steps 和一次 update；作为资源/管线校准，
+  不作为正式稳态吞吐或训练收益验收。详见
+  [视觉矩阵计划](mjlab-3dgs-p10-vision-matrix.md)。
+  修复 inference/reset 上下文后，预热重复计时四格亦已实机核验通过，每格
+  三轮中位数：full-env 为 55.30/33.35/95.79/34.18 env steps/s。
+  感知含 BVH/相机处理，不作为纯渲染或可相加分解。Gaussian on/off 匹配对照
+  八组亦已核验通过；splat/world 扩展预算和 Viser 等覆盖仍待完成。
 - [x] 2026-10-25 运行 `make check` 通过。
-- [ ] 运行完整 `make test`，包括经明确配置的 slow/real-asset 测试。
+- [ ] 完成完整测试验收，包括经明确配置的 slow/real-asset 测试。
+  2026-11-26 完整CPU `make test` 已通过：1401 passed、13 skipped、0 failed，
+  slow/真实PLY测试已执行，13项CUDA条件skip不计作通过。桌面GPU全套命令已准备，
+  待用户运行后审计，见 [收尾记录](validation/p10-closeout-2026-11-26.md)。
 - [x] 运行 `make docs`。
-- [ ] 检查当前所有 3DGS 修改，避免覆盖工作树中的用户改动。
+- [x] 2026-11-26 核查当前3DGS改动及与main/初始工作树的边界，保留已有工作，
+  本轮仅修复测试发现/断言和文档，不修改共享运行时、play/demo或场景资产。
 - [x] 2026-11-09 将 apartment 碰撞生成、可见碰撞柱体、manifest 无 SHA
   契约和视觉诊断整理为提交 ``e735d0b``。
 - [ ] 按仓库规范准备 PR 描述；未经用户明确命令不创建 commit 或
@@ -1386,6 +1440,109 @@ box 合并和 collision-only MJCF 导出。下列项目按“可配置、跨场�
 4. 基础视觉运动闭环成立后扩展到单台阶、楼梯、复杂地形与接触敏感实验。
 
 ## 14. 更新记录
+
+- 2026-11-26：完成P10功能审查与完整CPU make test，1401通过/13 CUDA skip/
+  0失败；用既有env接口显式配置真实PLY、允许W&B离线IPC，无测试删减。修正
+  pytest误收集artifacts及Studio测试alpha旧断言，补齐可复用工具说明；日志/JUnit
+  归档并准备桌面GPU全套脚本，play/demo/依赖/资产本轮不变，P10未整体标完。
+
+- 2026-11-26：启动P10功能收尾，make check通过；完整CPU make test首次因
+  artifacts内下载的SceneSplat测试被误收集而中断。pytest显式testpaths=tests，
+  保留slow/真实资产测试，继续完整重跑与失败分类；不把GPU/GUI或完整P10标完。
+  记录见 `validation/p10-closeout-2026-11-26.md`。
+
+- 2026-11-26：核验native三轮六次实机结果并重算汇总，中位Actual RT约1.03、
+  提交约51.5次/s，所有renderer ready且overflow为0，外部构建/输入快照一致。
+  native子实验收口，不据此归因纯渲染收益或认定训练相机改善，P10整体仍进行中。
+
+- 2026-11-26：准备独立native viewer复测，复用现有双碰撞变体工具和固定
+  PLY/checkpoint/motion，每变体20步预热、500次测量、三进程重复，自动打开
+  六个窗口。外部进程前后保存构建/输入hash并检查不变，记录Actual RT及提交
+  频率，不冒充显示FPS或纯渲染耗时。无依赖/驱动/play/demo修改，GPU待运行；
+  详见 `validation/p10-native-retest-2026-11-26.md`。
+  shell/内嵌Python语法、mock三轮命令及归档CPU fixture汇总检查通过；不把模拟
+  汇总值写成新GUI实测结果。
+
+- 2026-11-25：核验 current-full-zztT0pGh 当前环境全量复测，四格计时及八视角
+  共12份报告通过，构建指纹与安装核验一致；八组原始RGB/depth逐像素相同。
+  Sense为12.512/24.401/28.544/83.448 ms/batch，与历史量级接近，未见训练
+  相机明显提速。已安装Warp仍8ffab7a，不包含邻近源码新优化；后续区分Warp
+  更新验收与native viewer性能，保持P10进行中。详见当前全量验证记录。
+
+- 2026-11-25：确认已安装MuJoCo的11个原生文件与33ef7f10远程wheel一致，记录
+  实际映射libmujoco和运行文件树hash。已安装Warp为8ffab7a，区别于邻近源码
+  b4f0688；用户选择先测当前环境。新增独立构建指纹/同姿态帧比较工具，准备
+  四格全量计时和八视角逐帧对照，GPU未运行，不把native viewer提速推断为训练
+  相机提速。细节见 `validation/p10-current-full-2026-11-25.md`。
+
+- 2026-11-25：核验 multiview-refinement-iOIrPPHa 的24次采集，生成六列逐视角
+  对照图和审计 JSON。30万更接近全量但不改默认。八张全量RGB/depth与上一轮
+  归档完全相同，报告缺少原生构建指纹，不据此推断源码修复收益。按用户更新，
+  旧性能数值仅作历史基线，后续优先重测修复后全量，不继续以旧瓶颈裁点。
+
+- 2026-11-25：完成 multiview-3LNvW1Qt 的16次静态采集审计并生成逐视角对照图。
+  20万保留房间大体结构但墙面斑点/深度孔洞可见，保持全量默认。准备25万/
+  30万/全量24次同视角筛查，复用既有 capture-only；shell及mocked launcher
+  24组参数检查通过，GPU未运行。P10仍进行中，不宣称训练收益或全场景覆盖。
+
+- 2026-11-25：准备20万/全量的双位置×四朝向多视角对照，共16次静态采集。
+  复用 manifest spawn 与 reset yaw 参数，不新写位姿控制器；capture-only 在
+  PPO runner 构造前返回，保存 RGB/depth/qpos 和请求视角，无训练更新。
+  仅复用 p7_free 位置名，不重开 P7 任务验收；GPU 与图像逐视角核验待完成。
+  三项 CPU 回归、make check、shell/diff 检查通过；文档构建成功，1 条在线
+  引用索引无法访问的 warning。共享环境/传感器/play/demo 保持本次零修改。
+
+- 2026-11-25：核验 splat-budgets-qg3ZlRyj 八组报告和五个 reset 视角，生成
+  RGB/depth 对照图及量化审计。20万相对全量 sense 提速约 3.06x/2.77x（1/4
+  worlds），但仍有深度误差；5万/10万大量缺失。预算子矩阵完成，下一步多视角
+  验证20万候选，不将单场景/单视角结果推广为通用默认，P10仍进行中。
+
+- 2026-11-25：准备固定 64x48、1/4 worlds、5万/10万/20万/全量的 splat 预算
+  八组实验，复用既有 opacity 排序 max_splats，不引入新筛选算法。记录实际
+  共享 splat 数，选择性在计时外保存同一 reset 视角的 RGB/depth/qpos 和有效
+  深度比例。GPU/视觉对照待运行，不能把单视角有效深度当全场景覆盖质量。
+  三项 CPU 定向回归、make check、shell/diff 检查通过；文档构建成功，1 条
+  warning 为受限代理下 Python 在线引用索引无法访问。
+
+- 2026-11-25：核验 camera-comparison-5zGTMuoE 八组全部 passed，三轮中位数、
+  输入哈希与同配置两臂 camera/collision/PPO 一致性通过审计。启用 Gaussian 的
+  固定状态感知增量约 12.271/23.511/29.579/89.094 ms/batch；不等同纯渲染
+  内核成本。匹配对照子实验完成，下一步固定 64x48 扫描 splat 预算并核查视觉
+  覆盖，完整 P10 保持进行中。
+
+- 2026-11-25：准备 Gaussian on/off 匹配对照，复用现有重复 benchmark 增加默认
+  关闭的 --without-gaussians 开关；仅清空 Gaussian 配置，保留相机/碰撞并记录
+  collision/dependency hash 与有效资产。八进程两臂都重跑、配置间交替顺序，
+  GPU 尚未运行；以固定状态 sense 为主要成本比较，不把 PPO 差值当纯渲染开销。
+  两项 CPU 回归、make check、shell/diff 检查通过，文档构建成功（1 warning）。
+
+- 2026-11-25：核验 throughput-DA7sGc22 四格重跑全部 passed，三轮原始数据、
+  中位数、loss 有限性与当前 PLY/manifest 哈希通过审计，旧失败目录保留但不采纳。
+  固定观测 actor 约 0.37 ms/batch，感知约 12.39–83.16 ms/batch；下一步做
+  保留相机/碰撞而关闭 Gaussian 的匹配对照，尚不认定纯渲染占比或完整 P10 完成。
+
+- 2026-11-25：用户实机重复性能实验在 reset 时遇到 inference tensor 原地更新
+  异常；仅修复独立 benchmark 的 rollout/actor 上下文为 no_grad，PPO update
+  保留梯度，新增 CPU 双轮 history/reset 与反向传播回归。GPU 重跑待完成，
+  CPU 回归 1 passed、make check 和 diff 检查通过。失败报告不计作性能验收；
+  不修改共享环境、sensor 或 play/demo。
+
+- 2026-11-25：新增独立重复性能实验，复用 upstream physics/full-env 计时函数，
+  增加固定状态 sense、固定观测 actor、PPO rollout/update，剔除首轮并保留
+  三轮原始数据和中位数。四格桌面命令已准备，GPU 未运行；分项为独立负载，
+  不声称纯渲染耗时或可相加分解。make check、make docs、CLI/shell 检查和
+  三项配置回归通过，正式 P10 矩阵仍未验收。
+
+- 2026-11-25：核验用户完成的四格 GPU 视觉校准，4/4 passed，checkpoint
+  哈希与报告一致，四格 manifest hash 与当前文件一致。CNN 更新、相机输入
+  敏感性、保存恢复及恢复后更新通过，四环境局部 reset 隔离检查通过。
+  首格包含内核编译，不比较初始化快慢；采样含截图/同步，不作为稳态吞吐。
+  下一步分离 physics/render/policy/update 并做预热重复测量，P10 保持进行中。
+
+- 2026-11-25：P10 缓存完成最终验收：37 项定向回归、make check、make docs
+  通过，默认路径不做缓存 I/O，play/demo 不变。保留远程 wheel 校验码更新，
+  未安装新 wheel 或触碰驱动。下一步复用 vision smoke 准备四格 GPU 校准脚本，
+  尚未运行，不把小规模 PPO 管线检查标记为正式性能矩阵完成。
 
 - 2026-11-25：启动 P10 可选 3DGS 预处理缓存，独立模块加默认关闭的资产配置
   字段，不改 play/demo、manifest schema、训练或物理加载接口。基于 source

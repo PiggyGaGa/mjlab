@@ -135,7 +135,6 @@ explicit = true
 [tool.uv.sources]
 mujoco-warp = { git = "https://github.com/PiggyGaGa/mujoco_warp.git", branch = "mjwarp-3.16.0" }
 mujoco = [
-  { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'" },
   { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.13'" },
 ]
 warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
@@ -173,6 +172,7 @@ include = ["src", "tests"]
 exclude = ["src/mjlab/utils/lab_api", "typings"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]

@@ -2085,9 +2085,8 @@ dependencies = [
     { name = "imageio-ffmpeg" },
     { name = "mediapy" },
     { name = "mjviser" },
-    { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
+    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version != '3.13.*' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
     { name = "mujoco-warp" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
@@ -2160,8 +2159,7 @@ requires-dist = [
     { name = "imageio-ffmpeg" },
     { name = "mediapy", specifier = ">=1.2.7" },
     { name = "mjviser", specifier = ">=0.0.14" },
-    { name = "mujoco", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or platform_machine != 'x86_64' or sys_platform != 'linux'", specifier = "~=3.16.0" },
-    { name = "mujoco", marker = "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'", url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl" },
+    { name = "mujoco", marker = "python_full_version != '3.13.*' or platform_machine != 'x86_64' or sys_platform != 'linux'", specifier = "~=3.16.0" },
     { name = "mujoco", marker = "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux'", url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl" },
     { name = "mujoco-warp", git = "https://github.com/PiggyGaGa/mujoco_warp.git?branch=mjwarp-3.16.0" },
     { name = "numpy" },
@@ -2220,9 +2218,8 @@ name = "mjviser"
 version = "0.0.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
+    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version != '3.13.*' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -2350,48 +2347,6 @@ wheels = [
 [[package]]
 name = "mujoco"
 version = "3.16.0+3dgs"
-source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl" }
-resolution-markers = [
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-]
-dependencies = [
-    { name = "absl-py" },
-    { name = "etils", extra = ["epath"] },
-    { name = "glfw" },
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "pyopengl" },
-    { name = "websockets" },
-]
-wheels = [
-    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:1b8d11b7205a240223faefd6262dd1fa5003f554e0578b4688ea65c77e6b21fb" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "absl-py" },
-    { name = "absl-py", marker = "extra == 'sysid'" },
-    { name = "colorama", marker = "extra == 'sysid'" },
-    { name = "etils", extras = ["epath"] },
-    { name = "glfw" },
-    { name = "imageio", extras = ["ffmpeg"], marker = "extra == 'sysid'" },
-    { name = "jinja2", marker = "extra == 'sysid'" },
-    { name = "matplotlib", marker = "extra == 'sysid'" },
-    { name = "numpy" },
-    { name = "pillow", marker = "extra == 'usd'" },
-    { name = "plotly", marker = "extra == 'sysid'" },
-    { name = "pyopengl" },
-    { name = "pyyaml", marker = "extra == 'sysid'" },
-    { name = "scipy", marker = "extra == 'sysid'" },
-    { name = "tabulate", marker = "extra == 'sysid'" },
-    { name = "typing-extensions", marker = "extra == 'sysid'" },
-    { name = "usd-core", marker = "extra == 'usd'" },
-    { name = "websockets", specifier = ">=13" },
-]
-provides-extras = ["sysid", "usd"]
-
-[[package]]
-name = "mujoco"
-version = "3.16.0+3dgs"
 source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl" }
 resolution-markers = [
     "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -2405,7 +2360,7 @@ dependencies = [
     { name = "websockets" },
 ]
 wheels = [
-    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:ff9e145b2a1b2e259863d51f7270e5fce42d18e31b3a6e88db20132da5b9f5f7" },
+    { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:33ef7f10e5dde0697987509f893e92703801c457cd73e5c8e2886099bdd0bc6b" },
 ]
 
 [package.metadata]
@@ -2439,6 +2394,7 @@ resolution-markers = [
     "(python_full_version == '3.13.*' and platform_machine != 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
     "python_full_version >= '3.13' and sys_platform == 'darwin'",
     "(python_full_version == '3.12.*' and platform_machine != 'x86_64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'",
     "python_full_version == '3.12.*' and sys_platform == 'darwin'",
     "python_full_version == '3.11.*' and sys_platform != 'darwin'",
     "python_full_version == '3.11.*' and sys_platform == 'darwin'",
@@ -2451,7 +2407,7 @@ dependencies = [
     { name = "glfw" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' or (python_full_version >= '3.12' and python_full_version < '3.14' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'linux')" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.12.*' or python_full_version >= '3.14' or (python_full_version == '3.13.*' and platform_machine != 'x86_64') or (python_full_version == '3.13.*' and sys_platform != 'linux')" },
     { name = "pyopengl" },
     { name = "websockets" },
 ]
@@ -2489,9 +2445,8 @@ source = { git = "https://github.com/PiggyGaGa/mujoco_warp.git?branch=mjwarp-3.1
 dependencies = [
     { name = "absl-py" },
     { name = "etils", extra = ["epath"] },
-    { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp312-cp312-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "mujoco", version = "3.16.0+3dgs", source = { url = "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/mujoco-3.16.0%2B3dgs-cp313-cp313-manylinux_2_35_x86_64.whl" }, marker = "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
+    { name = "mujoco", version = "3.16.1.dev1003740167", source = { registry = "https://py.mujoco.org/" }, marker = "python_full_version != '3.13.*' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },

@@ -47,7 +47,11 @@ The CLI benchmark also checks all arrays and protects its source from report wri
 Focused cache/loader/native transport/manifest tests: 37 passed, 3 deselected.
 The two GPU-render-context integration tests and the known unrelated Studio pillar
 alpha assertion were not included. This is not a full repository test claim.
-Full type/lint and documentation validation are still pending in this record.
+Final validation completed: `UV_NO_SYNC=1 make check` passes (Ruff format/lint,
+ty and Pyright: zero errors), and `UV_NO_SYNC=1 make docs` succeeds. `git diff
+--check` passes. The existing environment was used without package synchronization;
+the newly refreshed remote wheel checksum was preserved but the wheel was not
+installed as part of this CPU-cache validation. No GPU render test is implied.
 
 ## Real-asset CPU measurements
 
@@ -80,6 +84,6 @@ No improvement to Actual RT, rendering FPS or training SPS is inferred.
 
 ## Acceptance boundary
 
-This implements optional preprocessing caching only. P8 remains closed; no collision
+This optional preprocessing-cache subtask is complete. P8 remains closed; no collision
 asset is regenerated. P10 sensor/training throughput matrices, full-suite validation
 and release/PR preparation remain separate unfinished work.

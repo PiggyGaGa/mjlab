@@ -19,9 +19,9 @@ def main() -> None:
     sys.platform != "linux"
     or platform.machine() != "x86_64"
     or platform.python_implementation() != "CPython"
-    or sys.version_info[:2] not in {(3, 12), (3, 13)}
+    or sys.version_info[:2] != (3, 13)
   ):
-    parser.error("The custom wheel requires Linux x86_64 and CPython 3.12/3.13")
+    parser.error("The custom wheel requires Linux x86_64 and CPython 3.13")
   tag = f"cp{sys.version_info.major}{sys.version_info.minor}"
   url = (
     "https://github.com/PiggyGaGa/mujoco/releases/download/v1.0/"

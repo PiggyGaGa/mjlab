@@ -3,7 +3,7 @@
 uv run tests/run_g1_3dgs_native_demo.py --steps 200
 uv run tests/run_g1_3dgs_native_demo.py --interactive
 
-uv selects the released custom wheel on Linux x86_64 with Python 3.12/3.13.
+uv selects the released custom wheel on Linux x86_64 with Python 3.13.
 """
 
 import argparse

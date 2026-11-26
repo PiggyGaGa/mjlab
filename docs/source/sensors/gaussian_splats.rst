@@ -5,10 +5,10 @@
 
 .. note::
 
-   On Linux x86_64 with Python 3.12 or 3.13, the repository's uv configuration
+   On Linux x86_64 with Python 3.13, the repository's uv configuration
    downloads the custom MuJoCo 3DGS wheel from
    `the fork's v1.0 Release <https://github.com/PiggyGaGa/mujoco/releases/tag/v1.0>`_.
-   The wheels require glibc 2.35 or newer. Run
+   The wheel requires glibc 2.35 or newer. Run
    ``uv run tests/run_g1_3dgs_native_demo.py --interactive`` for native playback;
    neither a neighboring MuJoCo checkout nor ``--no-sync`` is required.
    Other platforms and Python versions use official MuJoCo without the custom
@@ -307,6 +307,103 @@ This tool retains a fresh cache subdirectory and checks exact array equality acr
 all phases. Timings exclude Python startup and do not measure GPU allocation, BVH,
 Native Viewer FPS or training throughput. Cache creation may be slower than a
 normal first load; OS file caching affects repeated measurements.
+
+
+Repeated camera and training measurements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On a prepared CUDA environment, benchmark a manifest without editing the generic
+trainer or play/demo scripts:
+
+.. code-block:: bash
+
+    uv run --no-sync scripts/benchmarks/measure_3dgs_throughput.py \
+        --scene-manifest /path/to/manifest.json \
+        --device cuda:0 --num-envs 1 --width 64 --height 48 \
+        --steps 32 --warmup-steps 16 --repeats 3 \
+        --save-capture --output /tmp/gaussian-throughput.json
+
+Use a fresh output path for each run. ``--no-sync`` preserves the installed build
+being measured; prepare dependencies first. The benchmark reuses the G1 depth
+task and its PPO settings, captures RGB and depth, discards the first complete
+repetition and retains raw samples plus medians. Physics, full environment steps,
+stationary sensing, fixed-observation actor inference and PPO rollout/update are
+independent workloads, not additive components or pure renderer-kernel timing.
+Snapshot and file I/O run outside measured loops. Torch peak allocation excludes
+some renderer allocations and must not be labeled total device VRAM.
+
+Reports include installed MuJoCo/MuJoCo-Warp runtime-file hashes, package source
+metadata, mapped MuJoCo library hashes, source asset/collision hashes and benchmark
+script hashes. Installed-file identity does not establish which neighboring source
+checkout produced the binary, or identify the GPU driver/JIT cache. Same package
+version does not guarantee the same build. Short repeats measure pipeline cost,
+not policy convergence or visual task benefit.
+
+``--without-gaussians`` retains the manifest collision and RGB/depth camera while
+disabling only Gaussian assets. ``--max-splats N`` instead applies the loader's
+existing per-asset opacity-ranked cap; these options are mutually exclusive.
+Opacity ranking can leave spatial holes and does not guarantee uniform coverage.
+The default remains uncapped. Compare images as well as timing before choosing a
+budget; historical timing results do not describe every future renderer build.
+
+Static capture and archive comparison
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``--capture-only`` to save one fixed reset view per world without constructing
+a PPO runner or performing updates. ``--spawn-point`` selects an existing manifest
+spawn; ``--view-yaw-degrees`` is a finite fixed offset relative to spawn orientation:
+
+.. code-block:: bash
+
+    uv run --no-sync scripts/benchmarks/measure_3dgs_throughput.py \
+        --scene-manifest /path/to/manifest.json --device cuda:0 \
+        --capture-only --spawn-point default --view-yaw-degrees 90 \
+        --output /tmp/gaussian-view.json
+
+``--capture-only`` implies capture output; timed runs save it only when
+``--save-capture`` is selected. The sibling ``<report-stem>.capture`` directory
+contains raw ``reset.npz`` RGB/depth/qpos arrays and per-world RGB/depth PNGs.
+Depth previews use a fixed 5 m cutoff; invalid pixels are represented at the far
+cutoff in these previews, so inspect raw depth/validity statistics for missing data.
+Capture completion does not certify safe placement or visual quality.
+
+Compare two captures using passed reports with matching camera, input assets,
+collision, Gaussian count and actual qpos:
+
+.. code-block:: bash
+
+    uv run --no-sync scripts/benchmarks/compare_3dgs_captures.py \
+        --reference /path/to/previous-view.json \
+        --candidate /tmp/gaussian-view.json \
+        --output /tmp/gaussian-view-comparison.json
+
+The comparator disables pickle, checks matching inputs/shapes and finite identical
+qpos, and reports exact RGB/depth equality, raw errors and lost valid-depth pixels.
+Nonmatching inputs are recorded as ``not_comparable`` and the command fails.
+Different images are recorded as ``compared`` with errors, without inventing a
+quality threshold. Common-valid depth errors omit holes; empty valid intersections
+produce null error metrics. Full rendering is an archive reference, not independent
+geometry truth; a few static views cannot certify whole-scene or training quality.
+
+Integration test assets
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Some slow tests instantiate the visual task with a real Graphdeco-compatible PLY.
+Large reconstructed assets are not distributed with a clean checkout. Configure
+the existing task and real-asset test overrides explicitly before the full suite:
+
+.. code-block:: bash
+
+    MJLAB_G1_3DGS_ASSET=/path/to/splats.ply \
+    MJLAB_3DGS_TEST_ASSET=/path/to/splats.ply make test
+
+The first variable selects the default G1 visual-task asset; the second selects
+the real-asset import/render fixture. This tests the pipeline, not alignment or
+collision quality for an arbitrary replacement scene. To run the full CPU suite,
+also set ``FORCE_CPU=1 CUDA_VISIBLE_DEVICES=-1``; CUDA-gated skips remain separate
+from GPU acceptance. Offline W&B tests need local IPC even with ``WANDB_MODE=offline``.
+Default pytest discovery is restricted to ``tests/`` so downloaded experiments in
+``artifacts/`` are not mistaken for repository tests.
 
 
 External collision scene

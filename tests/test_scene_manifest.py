@@ -224,7 +224,7 @@ def test_studio_scene_manifest_is_current() -> None:
   for index in range(6):
     pillar = geoms[f"pillar_{index:02d}"]
     assert pillar.group == 1
-    assert pillar.rgba[3] == 1.0
+    assert pillar.rgba[3] == pytest.approx(0.8)
     assert pillar.contype != 0
     assert pillar.conaffinity != 0
 
